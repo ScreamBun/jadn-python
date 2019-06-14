@@ -1,0 +1,14 @@
+{
+  "name" : "jadnschema",
+  "pkg_name": "jadnschema",
+  "version" : {
+    "number" : {
+      "major": 0,
+      "minor": 0,
+      "bugfix": 1
+    },
+    "pipe_number" : "",
+    "hash" : "",
+    "date" : ""
+  }
+}

@@ -1,0 +1,65 @@
+image: gitlab.labs.g2-inc.net:4567/screamingbunny/docker/plus:centos-python3
+
+variables:
+  GIT_SSL_NO_VERIFY: "true"
+  JQ_LINUX64: https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64
+  PKG_NAME: jadnschema
+  VERSION_FILE: version.json
+
+before_script:
+  - if [ ! -f /tmp/jq ]; then yum -y install wget; wget $JQ_LINUX64 -qO /tmp/jq; chmod 755 /tmp/jq; fi
+  # Configure Version file
+  - echo "$(/tmp/jq --arg NUM ${CI_PIPELINE_ID} '.version.pipe_number=$NUM' $VERSION_FILE)" > $VERSION_FILE
+  - echo "$(/tmp/jq --arg SHA_HASH ${CI_COMMIT_SHA:0:8} '.version.hash=$SHA_HASH' $VERSION_FILE)" > $VERSION_FILE
+  - echo "$(/tmp/jq --arg DATE $(date +%Y-%m-%d) '.version.date=$DATE' $VERSION_FILE)" > $VERSION_FILE
+  - echo "$(/tmp/jq --arg PKG ${PKG_NAME} '.pkg_name=$PKG' $VERSION_FILE)" > $VERSION_FILE
+  # Configure Python Env
+  - pip3 install setuptools wheel --upgrade
+  - cd ./jadn && python3 setup.py develop
+
+
+# Copy and edit this stage for Unit/Code Testing
+#Test-Scripts:
+#  stage: test
+#
+#  script:
+#    - cd tests
+#    - python3 test_codec.py
+#    - python3 test_openc2.py
+
+#Translate-Schemas:
+#  stage: test
+#
+#  script:
+#    - cd tests
+#    - python3 message-validators.py
+#    - python3 schema-translators.py
+#    - $(rm -r ../../schema_gen && mkdir -p ../../schema_gen) || mkdir -p ../../schema_gen
+#    - mv ./schema_gen_test/* ../../schema_gen
+#
+#  artifacts:
+#    name: "JADN_Translations.${CI_PIPELINE_ID}_${CI_COMMIT_SHA:0:8}"
+#    expire_in: 2 weeks
+#    paths:
+#      - ./schema_gen/*
+
+
+Build-Wheel:
+  stage: deploy
+
+  only:
+    - /^(ci|CI).*$/
+
+  script:
+    - cp ../LICENSE ./
+    # - pip3 wheel . -w ./dist
+    - python3 setup.py sdist bdist_wheel
+    - mv ./dist/*.whl ../
+    - mv ./dist/*.tar.gz ../
+
+  artifacts:
+    name: "JADN_Python.${CI_PIPELINE_ID}_${CI_COMMIT_SHA:0:8}"
+    expire_in: 2 weeks
+    paths:
+      - ./*.whl
+      - ./*.tar.gz
