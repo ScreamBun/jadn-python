@@ -1,7 +1,6 @@
 """
 JADN to Markdown tables
 """
-
 from datetime import datetime
 
 from .base_dump import JADNConverterBase
