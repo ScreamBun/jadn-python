@@ -48,7 +48,7 @@ class Conversions(object):
 
     def MarkDown(self):
         print("Convert: JADN --> MarkDown Tables")
-        convert.md_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.md'))
+        convert.md_dump(schema=self._schema_json, fname=os.path.join(self._test_dir, self._schema + '.md'))
 
     def ProtoBuf(self):
         print("Convert: JADN --> ProtoBuf")
@@ -78,7 +78,7 @@ class Conversions(object):
 
 
 if __name__ == '__main__':
-    schema = 'oc2ls-wd13'
+    schema = 'oc2ls-v1.0-csprd03'
     conversions = Conversions(schema)
     validConvert = (
         "JSON",

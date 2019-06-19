@@ -3,20 +3,36 @@ JADN to Markdown tables
 """
 from datetime import datetime
 
-from .base_dump import JADNConverterBase
+from . import WriterBase
 
 from ...definitions import (
     multiplicity
 )
 
 
-class JADNtoMD(JADNConverterBase):
-    def md_dump(self):
+class JADNtoMD(WriterBase):
+    format = "md"
+
+    def dumps(self, comm=None):
         """
         Convert the given JADN schema to MarkDown Tables
-        :return: formatted MarkDown tables of the given JADN Schema
+        :param comm: Level of comments to include in converted schema, ignored
+        :return: formatted MarkDown tables of the given Schema
         """
         return self.makeHeader() + "\n".join(self._makeStructures(default=""))
+
+    def dump(self, fname, source="", comm=None):
+        """
+        Convert the given JADN schema to MarkDown Tables
+        :param fname: Name of file to write
+        :param source: Name of the original schema file
+        :param comm: Level of comments to include in converted schema, ignored
+        :return: None
+        """
+        with open(fname, "w") as f:
+            if source:
+                f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
+            f.write(self.dumps(comm))
 
     def makeHeader(self):
         """
@@ -241,26 +257,3 @@ class JADNtoMD(JADNConverterBase):
             table_md.append(f"| {' | '.join(tmp_row)} |")
 
         return '\n'.join(table_md) + '\n'
-
-
-def md_dumps(jadn):
-    """
-    Produce CDDL schema from JADN schema
-    :arg jadn: JADN Schema to convert
-    :return: MarkDown Table schema
-    """
-    return JADNtoMD(jadn).md_dump()
-
-
-def md_dump(jadn, fname, source=""):
-    """
-    Produce MarkDown tables from the given JADN schema and write to file provided
-    :param jadn: JADN Schema to convert
-    :param fname: Name of file to write
-    :param source: Name of the original JADN schema file
-    :return: None
-    """
-    with open(fname, "w") as f:
-        if source:
-            f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
-        f.write(md_dumps(jadn))

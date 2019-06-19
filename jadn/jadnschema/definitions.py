@@ -114,13 +114,13 @@ TYPE_CONFIG = dict(
         Null=(),
         String=('minv', 'maxv', 'format', 'pattern'),
         # Structures
-        Array=('format', ),
-        ArrayOf=('vtype', 'minv', 'maxv'),
+        Array=('minv', 'maxv', 'format'),
+        ArrayOf=('minv', 'maxv', 'vtype'),
         Choice=('id', ),
         Enumerated=('id', 'enum'),
         Map=('id', 'minv', 'maxv'),
-        MapOf=('ktype', 'vtype', 'minv', 'maxv'),
-        Record=()
+        MapOf=('ktype', 'minv', 'maxv', 'vtype'),
+        Record=('minv', 'maxv')
     )
 )
 TYPE_CONFIG["D2S"] = {v[0]: (k, v[1]) for k, v in TYPE_CONFIG["OPTIONS"].items()}
@@ -143,11 +143,6 @@ FIELD_CONFIG = dict(
         ']': ('maxc', int),         # Maximum cardinality
         '&': ('tfield', str),       # Field that specifies the type of this field
         '<': ('flatten', bool),     # Use FieldName as a qualifier for fields in FieldType
-        # Validation
-        # '/': ('format', str),  # Semantic validation keyword
-        # Type as Field Options
-        # '+': ('ktype', str),    # Key type for MapOf
-        # '*': ('vtype', str),    # Value type for ArrayOf and MapOf
     }
 )
 FIELD_CONFIG["D2S"] = {v[0]: (k, v[1]) for k, v in FIELD_CONFIG["OPTIONS"].items()}
