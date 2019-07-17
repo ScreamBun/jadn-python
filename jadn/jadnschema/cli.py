@@ -5,9 +5,9 @@ import sys
 
 from . import (
     base,
-    enums,
     # jadn
 )
+from jadn.jadnschema.convert.message import enums
 from .convert.message import Message
 
 

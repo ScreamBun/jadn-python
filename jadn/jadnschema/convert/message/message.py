@@ -3,9 +3,11 @@ import os
 from functools import partial
 from typing import Union
 
-from .conversions import Conversions
+from .serializations import serializations
 
-from ... import enums
+from ...utils import FrozenDict
+
+MessageFormats = FrozenDict({s.upper(): s for s in {*serializations.encode}.union({**serializations.decode})})
 
 
 class Message(object):
@@ -13,52 +15,43 @@ class Message(object):
     Load and dump a message to other formats
     """
 
-    def __init__(self, msg: Union[str, bytes, dict], fmt: str = enums.MessageFormats.JSON):
+    def __init__(self, msg: Union[str, bytes, dict], fmt: str = MessageFormats.JSON):
         """
         :param msg: message to load
         :param fmt: format of the message to load
         """
-        self._fmt = fmt
-        if self._fmt in enums.MessageFormats.values():
-            self._msg = self._load(msg) if isinstance(msg, str) and os.path.isfile(msg) else self._load(msg)
-        else:
-            raise ValueError("Message format is not known")
+        self._fmt = fmt if fmt in MessageFormats.values() else MessageFormats.JSON
+        self._msg = self._load(msg) if isinstance(msg, str) and os.path.isfile(msg) else self._loads(msg)
 
-        for k, v in Conversions.items():
-            if 'dump' in v:
-                setattr(self, f'{k}_dump', partial(v['dump'], self._msg))
-            if 'dumps' in v:
-                setattr(self, f'{k}_dumps', partial(v['dumps'], self._msg))
+        for msgFmt in MessageFormats.values():
+            setattr(self, f'{msgFmt}_dump', partial(self.dump, fmt=msgFmt))
+            setattr(self, f'{msgFmt}_dumps', partial(self.dumps, fmt=msgFmt))
 
-    def dump(self, fname: str):
+    def dump(self, fname: str, fmt: str = MessageFormats.JSON):
         """
-        Dump the message in json format
+        Dump the message in the specified format to the file given
         :param fname: file name to write to
+        :param fmt: format to write
         :return: None
         """
-        json_conv = Conversions.get(enums.MessageFormats.JSON)
-        if json_conv:
-            if 'dump' in json_conv:
-                json_conv['dump'](self._msg, fname)
+        msg = self.dumps(fmt)
+        with open(fname, 'wb' if isinstance(msg, (bytes, bytearray)) else 'w') as f:
+            f.write(msg)
 
-    def dumps(self):
+    def dumps(self, fmt: str = MessageFormats.JSON):
         """
-        Dump the message in json format
+        Dump the message in the specified format
+        :param fmt: format to write
         :return: json formatted message
         """
-        json_conv = Conversions.get(enums.MessageFormats.JSON)
-        if json_conv:
-            if 'dumps' in json_conv:
-                json_conv['dumps'](self._msg)
+        return serializations.encode.get(fmt)(self._msg)
 
     # Helper Functions
     def _load(self, fname):
-        if self._fmt not in Conversions:
-            raise ValueError("Message format is not known")
         with open(fname, 'rb') as f:
-            return Conversions[self._fmt].load(f)
+            return serializations.decode.get(self._fmt)(f.read())
 
     def _loads(self, val):
-        if self._fmt not in Conversions:
-            raise ValueError("Message format is not known")
-        return Conversions[self._fmt].loads(f)
+        if isinstance(val, dict):
+            return val
+        return serializations.decode.get(self._fmt)(val)

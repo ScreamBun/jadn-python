@@ -1,7 +1,14 @@
 import base64
+import re
 import sys
 
-from typing import Any, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Type,
+    Union
+)
 
 
 # Util Classes
@@ -87,26 +94,93 @@ class FrozenDict(ObjectDict):
 
 
 # Util Functions
-def default_encoding(itm: Any) -> Any:
+def toStr(s: Any) -> str:
     """
-    Encode the given object/type to the default of the system
-    :param itm: object/type to convert to the system default
-    :return: system default converted object/type
+    Convert a given type to a default string
+    :param s: item to convert to a string
+    :return: converted string
     """
+    return s.decode(sys.getdefaultencoding(), 'backslashreplace') if hasattr(s, 'decode') else str(s)
+
+
+def safe_cast(val: Any, to_type: Type, default: Any = None) -> Any:
+    """
+    Cast the given value to the goven type safely without an exception being thrown
+    :param val: value to cast
+    :param to_type: type to cast as
+    :param default: default value if casting fails
+    :return: casted value or given default/None
+    """
+    try:
+        return to_type(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def check_values(val: Any) -> Any:
+    """
+    Check the value of given and attempt to convert it to a bool, int, float
+    :param val: value to check
+    :return: converted/original value
+    """
+    if isinstance(val, str):
+        if val.lower() in ("true", "false"):
+            return safe_cast(val, bool,  val)
+
+        if re.match(r"^\d+\.\d+$", val):
+            return safe_cast(val, float,  val)
+
+        if val.isdigit():
+            return safe_cast(val, int,  val)
+
+    return val
+
+
+def default_encode(itm: Any, encoders: Dict[Type, Callable[[Any], Any]] = {}) -> Any:
+    """
+    Default encode the given object to the predefined types
+    :param itm: object to encode/decode,
+    :param encoders: custom type encoding - Ex) -> {bytes: lambda b: b.decode('utf-8', 'backslashreplace')}
+    :return: default system encoded object
+    """
+    if isinstance(itm, tuple(encoders.keys())):
+        return encoders[type(itm)](itm)
+
     if isinstance(itm, dict):
-        return {toStr(k): default_encoding(v) for k, v in itm.items()}
+        return {k: default_encode(v, encoders) for k, v in itm.items()}
 
-    elif isinstance(itm, list):
-        return [default_encoding(i) for i in itm]
+    if isinstance(itm, (list, tuple)):
+        return type(itm)(default_encode(i, encoders) for i in itm)
 
-    elif isinstance(itm, tuple):
-        tmp = tuple(default_encoding(i) for i in itm)
-
-    elif isinstance(itm, (complex, int, float, object)):
+    if isinstance(itm, (int, float)):
         return itm
-    else:
-        return toStr(itm)
-    return tmp
+
+    return toStr(itm)
+
+
+def default_decode(itm: Any, decoders: Dict[Type, Callable[[Any], Any]] = {}) -> Any:
+    """
+    Default decode the given object to the predefined types
+    :param itm: object to encode/decode,
+    :param decoders: custom type decoding - Ex) -> {bytes: lambda b: b.decode('utf-8', 'backslashreplace')}
+    :return: default system encoded object
+    """
+    if isinstance(itm, tuple(decoders.keys())):
+        return decoders[type(itm)](itm)
+
+    if isinstance(itm, dict):
+        return {k: default_decode(v, decoders) for k, v in itm.items()}
+
+    if isinstance(itm, (list, tuple)):
+        return type(itm)(default_decode(i, decoders) for i in itm)
+
+    if isinstance(itm, (int, float)):
+        return itm
+
+    if isinstance(itm, str):
+        return check_values(itm)
+
+    return itm
 
 
 def isBase64(sb: Union[str, bytes]) -> bool:
@@ -156,24 +230,4 @@ def toThawed(itm: Union[dict, FrozenDict, tuple]) -> Union[dict, list, str]:
     return itm
 
 
-def toStr(s: Any) -> str:
-    """
-    Convert a given type to a default string
-    :param s: item to convert to a string
-    :return: converted string
-    """
-    return s.decode(sys.getdefaultencoding(), 'backslashreplace') if hasattr(s, 'decode') else str(s)
 
-
-def safe_cast(val: Any, to_type: Type, default: Any = None) -> Any:
-    """
-    Cast the given value to the goven type safely without an exception being thrown
-    :param val: value to cast
-    :param to_type: type to cast as
-    :param default: default value if casting fails
-    :return: casted value or given default/None
-    """
-    try:
-        return to_type(val)
-    except (ValueError, TypeError):
-        return default

@@ -3,10 +3,11 @@ Basic JADN functions
 load, dump, format, validate
 """
 import json
-import jsonschema
+import numbers
 import os
-import re
+import warnings
 
+from datetime import datetime
 from io import BufferedIOBase, TextIOBase
 from typing import (
     List,
@@ -16,121 +17,8 @@ from typing import (
 
 from . import (
     definitions,
-    exceptions,
+    schema as jadn_schema
 )
-
-from .exceptions import (
-    DuplicateError,
-    FormatError,
-    OptionError,
-)
-
-_jadn_format = {
-    "type": "object",
-    "required": [
-        "meta",
-        "types"
-    ],
-    "additionalProperties": False,
-    "properties": {
-        "meta": {
-            "type": "object",
-            "required": [
-                "module"
-            ],
-            "additionalProperties": False,
-            "properties": {
-                "module": {
-                    "type": "string"
-                },
-                "patch": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "imports": {
-                    "type": "array",
-                    "items": {
-                        "type": "array",
-                        "minItems": 2,
-                        "maxItems": 2,
-                        "items": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "string"
-                            }
-                        ]
-                    }
-                },
-                "exports": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "types": {
-            "type": "array",
-            "items": {
-                "type": "array",
-                "minItems": 4,
-                "maxItems": 5,
-                "items": [
-                    {
-                        "type": "string"
-                    },
-                    {
-                        "type": "string"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "type": "string"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "array",
-                            "minItems": 3,
-                            "maxItems": 5,
-                            "items": [
-                                {
-                                    "type": "integer"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                },
-                                {
-                                    "type": "string"
-                                }
-                            ]
-                        }
-                    }
-                ]
-            }
-        }
-    }
-}
 
 
 def check_schema(schema: Union[dict, str]) -> dict:
@@ -141,91 +29,40 @@ def check_schema(schema: Union[dict, str]) -> dict:
     :param schema: schema to check
     :return: validated schema
     """
-    if isinstance(schema, str):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        schema_obj = jadn_schema.Schema()
+
+    if isinstance(schema, dict):
+        schema_obj.loads(schema)
+    else:
         try:
-            schema = loads(schema)
+            schema_obj.loads(schema)
         except ValueError:
-            schema = load(schema)
+            schema_obj.load(schema)
 
-    val = jsonschema.Draft7Validator(_jadn_format).validate(schema)
-    if val:
-        raise exceptions.FormatError("Schema Invalid")
+    errors = schema_obj.verify_schema(silent=True)
+    if errors:
+        for err in errors:
+            print(f"{err.__class__.__name__}: {err}")
+        raise ValueError("Schema error")
 
-    valid_fmts = set(list(definitions.FORMATS.SEMANTIC.keys()) + list(definitions.FORMATS.SERIALIZE.keys()))
-    valid_fmts_reg = set(filter(lambda f: re.match(r"^\^.*\$$", f), valid_fmts))
-    valid_fmts = valid_fmts - valid_fmts_reg
+    return schema_obj.schema
 
-    for type_def in jadn_idx2key(schema, True).get("types", []):
-        base_type = definitions.basetype(type_def["type"])
 
-        # Check if JADN Type
-        if not definitions.is_builtin(base_type):
-            raise TypeError(f"{type_def['name']} has invalid base type {base_type}")
+def jadn_strip(schema: dict) -> dict:
+    """
+    Strip comments from schema
+    :param schema: schema to strip comments
+    :return: comment stripped JADN schema
+    """
+    schema = jadn_idx2key(schema)
 
-        # Check if options are Valid
-        type_opts = type_def.get("opts", {})
-        valid_opts = definitions.TYPE_CONFIG.SUPPORTED_OPTIONS.get(base_type, ())
-        diff_opts = set(type_opts.keys()).difference(set(valid_opts))
-        if diff_opts:
-            raise OptionError(f"{type_def['name']} type {type_def['type']} invalid type option {', '.join(diff_opts)}")
-
-        if base_type in ("ArrayOf", "MapOf"):
-            if base_type == "MapOf":
-                if "ktype" in type_opts:
-                    pass
-                else:
-                    raise OptionError(f"{type_def['name']} - Missing key type")
-
-            if "vtype" in type_opts:
-                pass
-            else:
-                raise OptionError(f"{type_def['name']} - Missing value type")
-
-        # Check Type Format
-        fmt = type_opts.get("format", None)
-        if fmt:
-            if fmt not in valid_fmts or any([re.match(f, fmt) for f in valid_fmts_reg]):
-                raise ValueError(f"Unsupported value constraint \"{fmt}\" on {base_type}: {type_def.name}")
-
-        # Verify properly defined Type
-        if definitions.is_compound(base_type) and "fields" in type_def:
-            # Verify Fields
-            ordinal = base_type in ("Array", "Record")
-            tags = set()
-            names = set()
-
-            for k, field in enumerate(type_def['fields']):
-                name = field["value" if base_type == "Enumerated" else "name"]
-
-                if ordinal and field["id"] != k + 1:
-                    raise KeyError(f"Item tag: {type_def['name']} ({base_type}): {field['name']} -- {field['id']} should be {k + 1}")
-
-                if base_type != "Enumerated":  # and definitions.is_builtin(field['type']):
-                    valid_opts = list(definitions.TYPE_CONFIG.SUPPORTED_OPTIONS.get(field["type"], ())) + list(o[0] for o in definitions.FIELD_CONFIG.OPTIONS.values())
-                    field_opts = field["opts"]
-
-                    opts_diff = set(field_opts.keys()).difference({*valid_opts})
-                    if opts_diff:
-                        raise OptionError(f"{type_def['name']}: {field['name']} {field['type']} invalid field option(s) {', '.join(opts_diff)}")
-
-                    if 'minc' in field_opts and 'maxc' in field_opts:
-                        if field_opts['minc'] < 0 or (field_opts['maxc'] != 0 and field_opts['maxc'] < field_opts['minc']):
-                            raise OptionError(f"{type_def['name']}: {field['name']} bad cardinality {field_opts['minc']} {field_opts['maxc']}")
-
-                tags.add(field["id"])
-                names.add(name)
-
-            if len(type_def["fields"]) != len(tags):
-                raise DuplicateError(f"Tag collision in {type_def['name']} - {len(type_def['fields'])} items, {len(tags)} unique tags")
-
-            if len(type_def["fields"]) != len(names) and base_type not in ("Array", "ArrayOf", "MapOf"):
-                raise DuplicateError(f"Name collision in {type_def['name']} - {len(type_def['fields'])} items, {len(names)} unique names")
-
-        elif not definitions.is_compound(base_type) and "fields" in type_def:
-            # Invalid Type
-            raise FormatError(f"{type_def['name']} - cannot have fields")
-
-    return schema
+    for type_def in schema.get("types", []):
+        type_def["desc"] = ""
+        for field in type_def.get("fields", []):
+            field["desc"] = ""
+    return jadn_key2idx(schema)
 
 
 def loads(jadn_str: str) -> dict:
@@ -257,6 +94,60 @@ def load(fname: Union[str, BufferedIOBase, TextIOBase]) -> dict:
             raise FileNotFoundError(f"Schema file not found - '{fname}'")
 
     raise TypeError("fname is not a valid type")
+
+
+def dumps(schema: Union[complex, dict, float, int, str, tuple], indent: int = 2, strip: bool = False, _level: int = 0) -> str:
+    """
+    Properly format a JADN schema
+    :param schema: Schema to format
+    :param indent: spaces to indent
+    :param strip: strip comments from schema
+    :param _level: current indent level
+    :return: Formatted JADN schema
+    """
+    schema = jadn_strip(schema) if strip and _level == 0 and isinstance(schema, dict) else schema
+    _indent = indent - 1 if indent % 2 == 1 else indent
+    _indent += (_level * 2)
+    ind, ind_e = " " * _indent, " " * (_indent - 2)
+
+    if isinstance(schema, dict):
+        lines = f",\n".join(f"{ind}\"{k}\": {dumps(schema[k], indent, strip, _level+1)}" for k in schema)
+        return f"{{\n{lines}\n{ind_e}}}"
+
+    elif isinstance(schema, (list, tuple)):
+        nested = schema and isinstance(schema[0], (list, tuple))
+        lvl = _level+1 if nested and isinstance(schema[-1], (list, tuple)) else _level
+        lines = [dumps(val, indent, strip, lvl) for val in schema]
+        if nested:
+            return f"[\n{ind}" + f",\n{ind}".join(lines) + f"\n{ind_e}]"
+        return f"[{', '.join(lines)}]"
+
+    elif isinstance(schema, (numbers.Number, str)):
+        return json.dumps(schema)
+    else:
+        return "???"
+
+
+def dump(schema: dict, fname: Union[str, BufferedIOBase, TextIOBase], source: str = "", strip: bool = False) -> None:
+    """
+    Write the JADN to a file
+    :param schema: schema to write
+    :param fname: file to write to
+    :param source: name of source file
+    :param strip: strip comments from schema
+    """
+    if isinstance(fname, str):
+        with open(fname, "w") as f:
+            if source:
+                f.write(f"\"Generated from {source}, {datetime.ctime(datetime.now())}\"\n\n")
+            f.write(f"{dumps(schema, strip=strip)}\n")
+
+    elif isinstance(fname, (BufferedIOBase, TextIOBase)):
+        if source:
+            fname.write(f"\"Generated from {source}, {datetime.ctime(datetime.now())}\"\n\n")
+        fname.write(f"{dumps(schema, strip=strip)}\n")
+    else:
+        raise TypeError("fname is not a valid type")
 
 
 # Option Conversion
@@ -375,14 +266,14 @@ def jadn_idx2key(schema: Union[str, dict], opts: bool = False) -> dict:
     )
 
     for type_def in schema.get('types', []):
-        type_def = dict(zip(definitions.COLUMN_KEYS.Structure, type_def))
+        type_def = dict(zip(definitions.COLUMN_KEYS.STRUCTURE, type_def))
         base_type = definitions.basetype(type_def['type'])
         type_def['opts'] = topts_s2d(type_def['opts']) if opts else type_def['opts']
 
         if "fields" in type_def:
             tmp_fields = []
             for field in type_def['fields']:
-                field = dict(zip(definitions.COLUMN_KEYS['Enum_Def' if base_type == 'Enumerated' else 'Gen_Def'], field))
+                field = dict(zip(definitions.COLUMN_KEYS['ENUMERATED' if base_type == 'Enumerated' else 'GENERAL'], field))
                 if 'opts' in field:
                     field['opts'] = fopts_s2d(field['type'], field['opts']) if opts else field['opts']
                 tmp_fields.append(field)

@@ -1,25 +1,25 @@
 """
 JADN to Markdown tables
 """
+from beautifultable import BeautifulTable
 from datetime import datetime
 
-from . import WriterBase
+from .. import WriterBase
 
-from ...definitions import (
-    multiplicity
+from .... import (
+    definitions,
+    schema
 )
 
 
 class JADNtoMD(WriterBase):
     format = "md"
 
-    def dumps(self, comm=None):
-        """
-        Convert the given JADN schema to MarkDown Tables
-        :param comm: Level of comments to include in converted schema, ignored
-        :return: formatted MarkDown tables of the given Schema
-        """
-        return self.makeHeader() + "\n".join(self._makeStructures(default=""))
+    _alignment = {
+        "^": lambda a: f":{a[1:-1]}:",
+        "<": lambda a: f":{a[1:]}",
+        ">": lambda a: f"{a[:-1]}:",
+    }
 
     def dump(self, fname, source="", comm=None):
         """
@@ -34,6 +34,14 @@ class JADNtoMD(WriterBase):
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
             f.write(self.dumps(comm))
 
+    def dumps(self, comm=None):
+        """
+        Convert the given JADN schema to MarkDown Tables
+        :param comm: Level of comments to include in converted schema, ignored
+        :return: formatted MarkDown tables of the given Schema
+        """
+        return self.makeHeader() + "\n".join(self._makeStructures(default=""))
+
     def makeHeader(self):
         """
         Create the headers for the schema
@@ -42,14 +50,16 @@ class JADNtoMD(WriterBase):
         def mkrow(k, v):
             if isinstance(v, (list, tuple)):
                 v = ", ".join([f"**{i[0]}** {i[1]}" for i in v] if isinstance(v[0], (list, tuple)) else v)
-            return f'| **{k}** | {v} |'
+            return {".": f"**{k}:**", "..": v}
 
-        return '\n'.join([
-            '## Schema',
-            '| . | . |',
-            '| ---: | :--- |',
-            *[mkrow(meta, self._meta.get(meta, '')) for meta in self._meta_order]
-        ]) + '\n\n'
+        headers = {
+            ".": {'align': ">"},
+            "..": {}
+        }
+        meta_table = self._makeTable(headers, [mkrow(meta, self._meta.get(meta, '')) for meta in self._meta_order])
+        meta_table = str(meta_table).replace(" .. ", " .  ")
+
+        return f"## Schema\n{meta_table}\n"
 
     # Structure Formats
     def _formatArray(self, itm):
@@ -58,15 +68,15 @@ class JADNtoMD(WriterBase):
         :param itm: array to format
         :return: formatted array
         """
-        fmt = f" /{itm.opts.format}" if "format" in itm.opts else ""
+        fmt = f" /{itm.options.format}" if hasattr(itm.options, "format") else ""
         array_md = f"**_Type: {itm.name} (Array{fmt})_**\n\n"
         headers = {
-            'ID': {'align': 'r'},
+            'ID': {'align': '>'},
             'Type': {},
-            '#': {'align': 'r'},
+            '#': {'align': '>'},
             'Description': {}
         }
-        rows = [{"id": f.id, "type": f.type, "opts": f.opts, "desc": f"{f.name}:: {f.desc}"} for f in itm.fields]
+        rows = [{"id": f.id, "type": f.type, "options": f.options, "description": f"**{f.name}** - {f.description}"} for f in itm.fields]
 
         array_md += self._makeTable(headers, rows)
         return array_md
@@ -85,13 +95,13 @@ class JADNtoMD(WriterBase):
         :param itm: choice to format
         :return: formatted choice
         """
-        fmt = ".ID" if "id" in itm.opts else ""
+        fmt = ".ID" if hasattr(itm.options, "id") else ""
         choice_md = f"**_Type: {itm.name} (Choice{fmt})_**\n\n"
         headers = {
-            'ID': {'align': 'r'},
+            'ID': {'align': '>'},
             'Name': {},
             'Type': {},
-            '#': {'align': 'r'},
+            '#': {'align': '>'},
             'Description': {}
         }
         choice_md += self._makeTable(headers, itm.fields)
@@ -103,17 +113,17 @@ class JADNtoMD(WriterBase):
         :param itm: enum to format
         :return: formatted enum
         """
-        fmt = ".ID" if "id" in itm.opts else ""
+        fmt = ".ID" if hasattr(itm.options, "id") else ""
         enumerated_md = f"**_Type: {itm.name} (Enumerated{fmt})_**\n\n"
-        if "id" in itm.opts:
+        if hasattr(itm.options, "id"):
             headers = {
-                'ID': {'align': 'r'},
+                'ID': {'align': '>'},
                 'Description': {}
             }
-            rows = [{"ID": f.id, "Description": f"{f.value}:: {f.desc}"} for f in itm.fields]
+            rows = [{"ID": f.id, "Description": f"**{f.value}** - {f.description}"} for f in itm.fields]
         else:
             headers = {
-                'ID': {'align': 'r'},
+                'ID': {'align': '>'},
                 'Name': {},
                 'Description': {}
             }
@@ -127,25 +137,30 @@ class JADNtoMD(WriterBase):
         :param itm: map to format
         :return: formatted map
         """
-        fmt = ".ID" if "id" in itm.opts else ""
+        fmt = ".ID" if hasattr(itm.options, "id") else ""
+        minv = itm.options.get('minv', 0)
+        maxv = itm.options.get('maxv', 0)
+        if minv != 0 or maxv != 0:
+            fmt += f"{{{definitions.multiplicity(minv, maxv)}}}"
+
         map_md = f"**_Type: {itm.name} (Map{fmt})_**\n\n"
         headers = {
-            'ID': {'align': 'r'},
+            'ID': {'align': '>'},
             'Name': {},
             'Type': {},
-            '#': {'align': 'r'},
+            '#': {'align': '>'},
             'Description': {}
         }
         rows = []
         for field in itm.fields:
-            row = dict(field)
+            row = field.dict()
             if field.type == "MapOf":
-                row['type'] += f"({field.opts.get('ktype', 'String')}, {field.opts.get('vtype', 'String')})"
+                row['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
             elif field.type == "ArrayOf":
-                row['type'] += f"({field.opts.get('vtype', 'String')})"
+                row['type'] += f"({field.options.get('vtype', 'String')})"
 
-            if "format" in field.opts:
-                row['type'] += f" /{field.opts.format}"
+            if hasattr(field.options, "format"):
+                row['type'] += f" /{field.options.format}"
             rows.append(row)
 
         map_md += self._makeTable(headers, rows)
@@ -165,13 +180,18 @@ class JADNtoMD(WriterBase):
         :param itm: record to format
         :return: formatted record
         """
-        fmt = f" /{itm.opts.format}" if "format" in itm.opts else ""
-        record_md = f"**_Type: {itm['name']} (Record{fmt})_**\n\n"
+        fmt = f" /{itm.options.format}" if hasattr(itm.options, 'format') else ""
+        minv = itm.options.get('minv', 0)
+        maxv = itm.options.get('maxv', 0)
+        if minv != 0 or maxv != 0:
+            fmt += f"{{{definitions.multiplicity(minv, maxv)}}}"
+
+        record_md = f"**_Type: {itm.name} (Record{fmt})_**\n\n"
         headers = {
-            'ID': {'align': 'r'},
+            'ID': {'align': '>'},
             'Name': {},
             'Type': {},
-            '#': {'align': 'r'},
+            '#': {'align': '>'},
             'Description': {}
         }
         record_md += self._makeTable(headers, itm.fields)
@@ -192,19 +212,21 @@ class JADNtoMD(WriterBase):
         row = {
             'Type Name': f"**{itm.name}**",
             'Type Definition': itm.type,
-            'Description': itm.desc
+            'Description': itm.description
         }
         if itm.type == "MapOf":
-            row['Type Definition'] += f"({itm.opts.get('ktype', 'String')}, {itm.opts.get('vtype', 'String')})"
+            row['Type Definition'] += f"({itm.options.get('ktype', 'String')}, {itm.options.get('vtype', 'String')})"
         elif itm.type == "ArrayOf":
-            row['Type Definition'] += f"({itm.opts.get('vtype', 'String')})"
+            row['Type Definition'] += f"({itm.options.get('vtype', 'String')})"
 
-        if "format" in itm.opts:
-            row['Type Definition'] += f" /{itm.opts.format}"
+        if hasattr(itm.options, "format"):
+            row['Type Definition'] += f" /{itm.options.format}"
 
-        if any([v in itm.opts.keys() for v in ("minc", "maxc", "minv", "maxv")]):
-            multi = ("minc", "maxc") if "minc" in itm.opts else ("minv", "maxv")
-            row['Type Definition'] += f" [{multiplicity(itm.opts.get(multi[0], 1), itm.opts.get(multi[1], 1))}]"
+        if any([hasattr(itm.options, v) for v in ("minc", "maxc", "minv", "maxv")]):
+            multi = ("minc", "maxc") if hasattr(itm.options, "minc") else ("minv", "maxv")
+            minimum = itm.options.get(multi[0], 1)
+            maximum = itm.options.get(multi[1], 1)
+            row['Type Definition'] += f"{{{definitions.multiplicity(minimum, maximum)}}}"
 
         custom_md += self._makeTable(headers, [row])
         return custom_md
@@ -217,43 +239,34 @@ class JADNtoMD(WriterBase):
         :param rows: row values
         :return: formatted MarkDown table
         """
-        table_md = []
+        table_md = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
+        table_md.set_style(BeautifulTable.STYLE_MARKDOWN)
+        table_md.column_headers = list(headers.keys())
 
-        # Headers
-        header = []
-        header_align = []
-        for column, opts in headers.items():
-            header.append(column)
-            align = opts.get('align', 'left')
-            header_align.append('---:' if align.startswith('r') else (':---:' if align.startswith('c') else ':---'))
-
-        table_md.append(f"| {' | '.join(header)} |")
-        table_md.append(f"| {' | '.join(header_align)} |")
-
-        # Body
         for row in rows:
             tmp_row = []
-            for column, opts in headers.items():
-                column = column if column in row else self._table_field_headers.get(column, column)
+            for column in table_md.column_headers:
+                has_column = column in row if isinstance(row, dict) else hasattr(row, column)
+                column = column if has_column else self._table_field_headers.get(column, column)
+
                 if isinstance(column, str):
                     cell = row.get(column, '')
                 else:
                     cell = list(filter(None, [row.get(c, None) for c in column]))
                     cell = cell[0] if len(cell) == 1 else ''
 
-                if column == "opts":
-                    if isinstance(cell, dict):
-                        cell = multiplicity(cell.get("minc", 1), cell.get("maxc", 1))
-                        # TODO: More options
-                    else:
-                        print(cell)
+                if column == "options" and isinstance(cell, schema.Options):
+                    cell = definitions.multiplicity(cell.get("minc", 1), cell.get("maxc", 1))
+                    # TODO: More options
 
                 elif column == ("name", "value"):
                     cell = f"**{cell}**"
+                tmp_row.append(cell)
+            table_md.append_row(tmp_row)
 
-                tmp_str = str(cell)
-                tmp_row.append(' ' if tmp_str == '' else tmp_str)
-
-            table_md.append(f"| {' | '.join(tmp_row)} |")
-
-        return '\n'.join(table_md) + '\n'
+        table_rows = str(table_md).split("\n")
+        head = dict(zip([h.strip() for h in table_rows[0].split("|")], table_rows[1].split("|")))
+        alignment = [self._alignment.get(headers[k].get("align", "<"))(v)  for k, v in head.items() if k]
+        table_rows[1] = f"|{'|'.join(alignment)}|"
+        table_md = '\n'.join(table_rows)
+        return f"{table_md}\n"

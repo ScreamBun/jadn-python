@@ -11,7 +11,7 @@ META_ORDER = ('title', 'module', 'patch', 'description', 'exports', 'imports')
 # Column Keys
 COLUMN_KEYS = utils.FrozenDict(
     # Structures
-    Structure=(
+    STRUCTURE=(
         'name',     # 0 - TNAME - Datatype name
         'type',     # 1 - TTYPE - Base type - built-in or defined
         'opts',     # 2 - TOPTS - Type options
@@ -19,12 +19,12 @@ COLUMN_KEYS = utils.FrozenDict(
         'fields'    # 4 - FIELDS - List of fields
     ),
     # Field Definitions
-    Enum_Def=(
+    ENUMERATED=(
         'id',       # 0 - FTAG - Element ID
         'value',    # 1 - FNAME - Element name
         'desc'      # 2 - EDESC - Enumerated value description
     ),
-    Gen_Def=(
+    GENERAL=(
         'id',       # 0 - FTAG - Element ID
         'name',     # 1 - FNAME - Element name
         'type',     # 2 - FTYPE - Datatype of field
@@ -34,7 +34,7 @@ COLUMN_KEYS = utils.FrozenDict(
 )
 
 # Types
-JADN_TYPES = utils.FrozenDict(
+TYPES = utils.FrozenDict(
     PRIMITIVES=(
         'Binary',       # A sequence of octets. Length is the number of octets
         'Boolean',      # An element with one of two values: true or false
@@ -85,7 +85,7 @@ FORMATS = utils.FrozenDict(
         'i8': int,                      # Signed 8 bit integer, value must be between -128 and 127
         'i16': int,                     # Signed 16 bit integer, value must be between -32768 and 32767.
         'i32': int,                     # Signed 32 bit integer, value must be between ... and ...
-        r'^u\d$': int,                  # Unsigned integer or bit field of <n> bits, value must be between 0 and 2^<n> - 1
+        r'^u\d+$': int,                 # Unsigned integer or bit field of <n> bits, value must be between 0 and 2^<n> - 1
     }),
     SERIALIZE=utils.FrozenDict(),
 )
@@ -103,18 +103,17 @@ TYPE_CONFIG = dict(
         '%': ('pattern', str),  # Regular expression used to validate a String type
         '{': ('minv', int),     # Minimum numeric value, octet or character count, or element count
         '}': ('maxv', int),     # Maximum numeric value, octet or character count, or element count
-        '!': ('default', str),  # Default value for an instance of this type
     },
     SUPPORTED_OPTIONS=dict(
         # Primitives
-        Binary=('minv', 'maxv', 'format'),
+        Binary=('format', 'minv', 'maxv'),
         Boolean=(),
-        Integer=('minv', 'maxv', 'format'),
-        Number=('minv', 'maxv', 'format'),
+        Integer=('format', 'minv', 'maxv'),
+        Number=('format', 'minv', 'maxv'),
         Null=(),
-        String=('minv', 'maxv', 'format', 'pattern'),
+        String=('format', 'minv', 'maxv', 'pattern'),
         # Structures
-        Array=('minv', 'maxv', 'format'),
+        Array=('format', 'minv', 'maxv'),
         ArrayOf=('minv', 'maxv', 'vtype'),
         Choice=('id', ),
         Enumerated=('id', 'enum'),
@@ -124,29 +123,20 @@ TYPE_CONFIG = dict(
     )
 )
 TYPE_CONFIG["D2S"] = {v[0]: (k, v[1]) for k, v in TYPE_CONFIG["OPTIONS"].items()}
-
-
 TYPE_CONFIG = utils.toFrozen(TYPE_CONFIG)
 
-"""
-minc    maxc	Multiplicity	Description	                                Keywords
-0	    1	    0..1	        No instances or one instance	            optional
-1	    1	    1	            Exactly one instance	                    required
-0	    0	    0..*	        Zero or more instances	                    optional, repeated
-1	    0	    1..*	        At least one instance	                    required, repeated
-m	    n	    m..n	        At least m but no more than n instances     required, repeated if m > 1
-"""
+
 FIELD_CONFIG = dict(
     OPTIONS={
         # Structural
         '[': ('minc', int),         # Minimum cardinality
         ']': ('maxc', int),         # Maximum cardinality
-        '&': ('tfield', str),       # Field that specifies the type of this field
+        '&': ('tfield', str),       # Field that specifies the type of this field, value is Enumerated
         '<': ('flatten', bool),     # Use FieldName as a qualifier for fields in FieldType
+        '!': ('default', str),      # Reserved for default value Section 3.2.2.4
     }
 )
 FIELD_CONFIG["D2S"] = {v[0]: (k, v[1]) for k, v in FIELD_CONFIG["OPTIONS"].items()}
-
 FIELD_CONFIG = utils.toFrozen(FIELD_CONFIG)
 
 
@@ -157,7 +147,7 @@ def is_builtin(vtype: str) -> bool:
     :param vtype: Type
     :return: is builtin type
     """
-    return vtype in JADN_TYPES.PRIMITIVES + JADN_TYPES.STRUCTURES
+    return vtype in TYPES.PRIMITIVES + TYPES.STRUCTURES
 
 
 def is_primitive(vtype: str) -> bool:
@@ -166,7 +156,7 @@ def is_primitive(vtype: str) -> bool:
     :param vtype: Type
     :return: is builtin primitive
     """
-    return vtype in JADN_TYPES.PRIMITIVES
+    return vtype in TYPES.PRIMITIVES
 
 
 def is_structure(vtype: str) -> bool:
@@ -175,7 +165,7 @@ def is_structure(vtype: str) -> bool:
     :param vtype: Type
     :return: is builtin structure
     """
-    return vtype in JADN_TYPES.STRUCTURES
+    return vtype in TYPES.STRUCTURES
 
 
 def is_compound(vtype: str) -> bool:
@@ -213,7 +203,15 @@ def basetype(tt: str) -> str:
     return tt.rsplit(".")[0]  # Strip off subtype (e.g., .ID)
 
 
-def multiplicity(minimum: int, maximum: int) -> str:
-    if minimum == 1 and maximum == 1:
+def multiplicity(minc: int, maxc: int) -> str:
+    """
+    minc    maxc	Multiplicity	Description	                                Keywords
+    0	    1	    0..1	        No instances or one instance	            optional
+    1	    1	    1	            Exactly one instance	                    required
+    0	    0	    0..*	        Zero or more instances	                    optional, repeated
+    1	    0	    1..*	        At least one instance	                    required, repeated
+    m	    n	    m..n	        At least m but no more than n instances     required, repeated if m > 1
+    """
+    if minc == 1 and maxc == 1:
         return "1"
-    return f"{minimum}..{'*' if maximum == 0 else maximum}"
+    return f"{minc}..{'*' if maxc == 0 else maxc}"

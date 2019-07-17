@@ -1,5 +1,6 @@
-from .message import Message
+from .message import Message, MessageFormats
 
 __all__ = [
-    'Message'
+    'Message',
+    'MessageFormats'
 ]

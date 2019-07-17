@@ -4,8 +4,9 @@ from datetime import datetime
 
 from jadnschema import (
     convert,
-    enums,
-    jadn
+    jadn,
+    # Enums
+    CommentLevels,
 )
 
 
@@ -24,8 +25,8 @@ class Conversions(object):
 
     def CDDL(self):
         print("Convert: JADN --> CDDL")
-        convert.cddl_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.cddl'), comm=enums.CommentLevels.ALL)
-        convert.cddl_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.cddl'), comm=enums.CommentLevels.NONE)
+        convert.cddl_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.cddl'), comm=CommentLevels.ALL)
+        convert.cddl_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.cddl'), comm=CommentLevels.NONE)
         # print("Convert: CDDL --> JADN")
         # convert.cddl_load(open(os.path.join(self._test_dir, self._schema + '.all.cddl'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.cddl.jadn'))
 
@@ -39,10 +40,17 @@ class Conversions(object):
         # print("Convert: JAS --> JADN ")
         # convert.jas_load(open(os.path.join(self._test_dir, self._schema + '.jas'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.jas.jadn'))
 
+    def JIDL(self):
+        print("Convert: JADN --> JIDL")
+        convert.jidl_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.jidl'))
+        # print("Convert: JIDL --> JADN")
+        # with open(os.path.join(self._test_dir, self._schema + '.jidl.jadn'), "w") as f:
+        #     convert.jidl_loads(open(os.path.join(self._test_dir, self._schema + '.jidl'), 'rb').read()).dump(f)
+
     def JSON(self):
         print("Convert: JADN --> JSON")
-        convert.json_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.json'), comm=enums.CommentLevels.ALL)
-        convert.json_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.json'), comm=enums.CommentLevels.NONE)
+        convert.json_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.json'), comm=CommentLevels.ALL)
+        convert.json_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.json'), comm=CommentLevels.NONE)
         # print("Convert: JSON --> JADN")
         # convert.json_load(open(os.path.join(self._test_dir, self._schema + '.all.json'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.json.jadn'))
 
@@ -52,22 +60,22 @@ class Conversions(object):
 
     def ProtoBuf(self):
         print("Convert: JADN --> ProtoBuf")
-        convert.proto_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.proto'), comm=enums.CommentLevels.ALL)
-        convert.proto_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.proto'), comm=enums.CommentLevels.NONE)
+        convert.proto_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.proto'), comm=CommentLevels.ALL)
+        convert.proto_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.proto'), comm=CommentLevels.NONE)
         # print("Convert: ProtoBuf --> JADN")
         # convert.proto_load(open(os.path.join(self._test_dir, self._schema + '.all.proto'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.proto.jadn'))
 
     def Relax_NG(self):
         print("Convert: JADN --> RelaxNG")
-        convert.relax_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.rng'), comm=enums.CommentLevels.ALL)
-        convert.relax_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.rng'), comm=enums.CommentLevels.NONE)
+        convert.relax_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.rng'), comm=CommentLevels.ALL)
+        convert.relax_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.rng'), comm=CommentLevels.NONE)
         # print("Convert: RelaxNG --> JADN")
         # convert.relax_load(open(os.path.join(self._test_dir, self._schema + '.all.rng'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.rng.jadn'))
 
     def Thrift(self):
         print("Convert: JADN --> Thrift")
-        convert.thrift_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.thrift'), comm=enums.CommentLevels.ALL)
-        convert.thrift_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.thrift'), comm=enums.CommentLevels.NONE)
+        convert.thrift_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.thrift'), comm=CommentLevels.ALL)
+        convert.thrift_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.thrift'), comm=CommentLevels.NONE)
         # print("Convert: Thrift --> JADN")
         # convert.thrift_load(open(os.path.join(self._test_dir, self._schema + '.all.thrift'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.thrift.jadn'))
 
@@ -78,9 +86,12 @@ class Conversions(object):
 
 
 if __name__ == '__main__':
+    # schema = 'oc2ls-v1.0-wd14_update'
     schema = 'oc2ls-v1.0-csprd03'
     conversions = Conversions(schema)
     validConvert = (
+        "HTML",
+        "JIDL",
         "JSON",
         "MarkDown"
     )

@@ -1,32 +1,25 @@
 import importlib
-import sys
 
 from functools import partial
 
-from typing import (
-    Union
-)
+from typing import Union
 
-from .base import register_reader, register_writer, ReaderBase, WriterBase
+from .base import (
+    register_reader,
+    register_writer,
+    ReaderBase,
+    WriterBase
+)
 
 from . import (
-    # cddl,
-    # html,
-    # jas,
-    json_schema,
-    markdown,
-    # protobuf,
-    # relax_ng,
-    # thrift,
-)
-
-from ... import (
-    enums
+    enums,
+    readers,
+    writers
 )
 
 
 # Base Functions
-def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN):
+def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
     """
     Produce formatted schema from JADN schema
     :param schema: JADN Schema to convert
@@ -40,12 +33,12 @@ def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enu
     cls = writers.get(fmt, None)
     if cls:
         comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
-        return cls(schema).dump(fname, source, comm)
+        return cls(schema).dump(fname, source, comm, *args, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN):
+def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
     """
     Produce formatted schema from JADN schema
     :param schema: JADN Schema to convert
@@ -57,12 +50,12 @@ def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: st
     cls = writers.get(fmt, None)
     if cls:
         comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
-        return cls(schema).dumps(comm)
+        return cls(schema).dumps(comm, *args, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaFormats.JADN):
+def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
     """
     Produce JADN schema from input schema
     :param schema: Schema to convert
@@ -73,12 +66,12 @@ def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaForm
     readers = importlib.import_module(".base", __package__).registered.readers
     cls = readers.get(fmt, None)
     if cls:
-        return cls(schema).load(source)
+        return cls().load(schema, source, *args, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN):
+def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
     """
     Produce JADN schema from input schema
     :param schema: schema file to convert
@@ -88,47 +81,37 @@ def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN):
     readers = importlib.import_module(".base", __package__).registered.readers
     cls = readers.get(fmt, None)
     if cls:
-        return cls(schema).loads()
+        return cls().loads(schema, *args, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-# Register Readers
-# register_reader(fmt=json_schema.JSONtoJADN)
+# Add format reader/writers
+# HTML
+register_writer(fmt=writers.JADNtoHTML)
+html_dump = partial(dump, fmt="html")
+html_dumps = partial(dumps, fmt="html")
 
-# Register Writers
-register_writer(fmt=json_schema.JADNtoJSON)
-register_writer(fmt=markdown.JADNtoMD)
-
+# JADN IDL
+register_writer(fmt=writers.JADNtoIDL)
+# register_reader(fmt=readers.IDLtoJADN)
+jidl_dump = partial(dump, fmt="jidl")
+jidl_dumps = partial(dumps, fmt="jidl")
+# jidl_load = partial(load, fmt="jidl")
+# jidl_loads = partial(loads, fmt="jidl")
 
 # JSON
+register_writer(fmt=writers.JADNtoJSON)
+# register_reader(fmt=readers.JSONtoJADN)
 json_dump = partial(dump, fmt="json")
 json_dumps = partial(dumps, fmt="json")
 # json_load = partial(load, fmt="json")
-# json_loadss = partial(loads, fmt="json")
+# json_loads = partial(loads, fmt="json")
 
 # Markdown
+register_writer(fmt=writers.JADNtoMD)
 md_dump = partial(dump, fmt="md")
 md_dumps = partial(dumps, fmt="md")
-
-
-# Dynamically add Reader/Writer
-registered = importlib.import_module(".base", __package__).registered
-dynamic_funs = []
-
-# Reference this modules vars
-self = dir(sys.modules[__name__])
-
-for suffix, fmts in registered.items():
-    suffix = "load" if suffix == "readers" else "dump"
-    for fmt in fmts.keys():
-        if f"{fmt}_{suffix}" not in self:
-            setattr(self, f"{fmt}_{suffix}", partial(getattr(self, f"{suffix}"), fmt=fmt))
-            dynamic_funs.append(f"{fmt}_{suffix}")
-
-        if f"{fmt}_{suffix}s" not in self:
-            setattr(self, f"{fmt}_{suffix}s", partial(getattr(self, f"{suffix}s"), fmt=fmt))
-            dynamic_funs.append(f"{fmt}_{suffix}s")
 
 __all__ = [
     # Base
@@ -137,10 +120,12 @@ __all__ = [
     # Convert to ...
     # 'cddl_dump',
     # 'cddl_dumps',
-    # 'html_dump',
-    # 'html_dumps',
+    'html_dump',
+    'html_dumps',
     # 'jas_dump',
     # 'jas_dumps',
+    'jidl_dump',
+    'jidl_dumps',
     'json_dump',
     'json_dumps',
     'md_dump',
@@ -156,6 +141,8 @@ __all__ = [
     # 'cddl_loads',
     # 'jas_load',
     # 'jas_loads',
+    # 'jidl_load',
+    # 'jidl_loads',
     # 'json_load',
     # 'json_loads',
     # 'proto_load',
@@ -169,7 +156,7 @@ __all__ = [
     'dumps',
     'load',
     'loads',
-    *dynamic_funs,
+    # *dynamic_funs,
     # Helpers
     'register_reader',
     'register_writer'
