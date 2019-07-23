@@ -34,6 +34,11 @@ class Conversions(object):
         print("Convert: JADN --> HMTL Tables")
         convert.html_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.html'))
 
+    def JADN(self):
+        print("Convert: JADN --> JAS")
+        convert.jadn_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.all.jadn'), comm=CommentLevels.ALL)
+        convert.jadn_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.none.jadn'), comm=CommentLevels.NONE)
+
     def JAS(self):
         print("Convert: JADN --> JAS")
         convert.jas_dump(self._schema_json, os.path.join(self._test_dir, self._schema + '.jas'))
@@ -86,11 +91,12 @@ class Conversions(object):
 
 
 if __name__ == '__main__':
-    # schema = 'oc2ls-v1.0-wd14_update'
-    schema = 'oc2ls-v1.0-csprd03'
+    schema = 'oc2ls-v1.0-csprd03-updates'
+    # schema = 'oc2ls-v1.0-csprd03'
     conversions = Conversions(schema)
     validConvert = (
         "HTML",
+        "JADN",
         "JIDL",
         "JSON",
         "MarkDown"

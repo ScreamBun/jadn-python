@@ -8,25 +8,25 @@ from datetime import datetime
 
 from typing import (
     Any,
+    Dict,
     List
 )
 
-from .. import WriterBase
+from ..base import WriterBase
 
-from ....definitions import (
-    multiplicity
-)
+from .... import schema
 
 
 class JADNtoIDL(WriterBase):
     format = "jidl"
-    _alignment = {
+
+    _alignment: Dict[str, str] = {
         "^": BeautifulTable.ALIGN_CENTER,
         "<": BeautifulTable.ALIGN_LEFT,
         ">": BeautifulTable.ALIGN_RIGHT
     }
 
-    def dump(self, fname, source="", comm=None) -> None:
+    def dump(self, fname: str, source: str = None, comm: str = None) -> None:
         """
         Produce JSON schema from JADN schema and write to file provided
         :param fname: Name of file to write
@@ -34,13 +34,12 @@ class JADNtoIDL(WriterBase):
         :param comm: Level of comments to include in converted schema, ignored
         :return: None
         """
-
         with open(fname, "w") as f:
             if source:
                 f.write(f"/* Generated from {source}, {datetime.ctime(datetime.now())}*/\n")
             f.write(self.dumps())
 
-    def dumps(self, comm=None) -> str:
+    def dumps(self, comm: str = None) -> str:
         """
         Converts the JADN schema to JSON
         :param comm: Level of comments to include in converted schema, ignored
@@ -50,16 +49,16 @@ class JADNtoIDL(WriterBase):
         jidl_schema = "\n".join(l.rstrip() for l in re.sub(r"\t", " "*4, jidl_schema).split("\n"))
         return jidl_schema
 
-    def makeHeader(self):
+    def makeHeader(self) -> str:
         """
         Create the headers for the schema
         :return: header for schema
         """
         meta = [[f"{meta_key}:", self._meta.get(meta_key, '')] for meta_key in self._meta_order]
-        return self._makeTable(meta) + "\n\n"
+        return f"{self._makeTable(meta)}\n\n"
 
     # Structure Formats
-    def _formatArray(self, itm):
+    def _formatArray(self, itm: schema.definitions.Array) -> str:
         """
         Formats array for the given schema type
         :param itm: array to format
@@ -69,14 +68,23 @@ class JADNtoIDL(WriterBase):
         array_idl = f"{itm.name} = Array{fmt} {{"
 
         fields = []
-        for i, f in enumerate(itm.fields):
-            fType = f"{f.type}" + (f"({f.options.get('vtype', 'String')})" if f.type == "ArrayOf" else (f"({f.options.get('ktype', 'String')}, {f.options.get('vtype', 'String')})" if f.type == "MapOf" else ""))
-            array = f"[{multiplicity(f.options.get('minc', 0), f.options.get('maxc', 0))}]" if self._is_array(f.options) else ""
-            fmt = f" /{f.options.format}" if hasattr(f.options, "format") else ""
-            opt = " optional" if self._is_optional(f.options) else ""
-            cont = ',' if i + 1 != len(itm.fields) else ''
-            tmp_field = [f.id, f"{fType}{array}{fmt}{'' if array else opt}{cont}", f"// {f.name}:: {f.description}" if f.description else ""]
-            fields.append(tmp_field)
+        for idx, field in enumerate(itm.fields):
+            field_type = f"{field.type}"
+            if field.type == "ArrayOf":
+                field_type += f"({field.options.get('vtype', 'String')})"
+            elif field.type == "MapOf":
+                field_type += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
+
+            array = f"[{field.options.multiplicity()}]" if self._is_array(field.options) else ""
+            fmt = f" /{field.options.format}" if hasattr(field.options, "format") else ""
+            opt = " optional" if self._is_optional(field.options) else ""
+            cont = ',' if idx + 1 != len(itm.fields) else ''
+
+            fields.append([
+                field.id,
+                f"{field_type}{array}{fmt}{'' if array else opt}{cont}",
+                f"// {field.name}:: {field.description}" if field.description else ""
+            ])
         fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
 
         if itm.description:
@@ -89,7 +97,7 @@ class JADNtoIDL(WriterBase):
         array_idl += f"\n{fields}"
         return f"{array_idl}\n}}\n"
 
-    def _formatArrayOf(self, itm):
+    def _formatArrayOf(self, itm: schema.definitions.ArrayOf) -> str:
         """
         Formats arrayOf for the given schema type
         :param itm: arrayOf to format
@@ -97,24 +105,14 @@ class JADNtoIDL(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatChoice(self, itm):
+    def _formatChoice(self, itm: schema.definitions.Choice) -> str:
         """
         Formats choice for the given schema type
         :param itm: choice to format
         :return: formatted choice
         """
         choice_idl = f"{itm.name} = Choice {{"
-
-        fields = []
-        for i, f in enumerate(itm.fields):
-            fType = f"{f.type}" + (f"({f.options.get('vtype', 'String')})" if f.type == "ArrayOf" else (f"({f.options.get('ktype', 'String')}, {f.options.get('vtype', 'String')})" if f.type == "MapOf" else ""))
-            array = f"[{multiplicity(f.options.get('minc', 0), f.options.get('maxc', 0))}]" if self._is_array(f.options) else ""
-            fmt = f" /{f.options.format}" if hasattr(f.options, "format") else ""
-            opt = " optional" if self._is_optional(f.options) else ""
-            cont = ',' if i + 1 != len(itm.fields) else ''
-            tmp_field = [f.id, f.name, f"{fType}{array}{fmt}{'' if array else opt}{cont}", f"// {f.description}" if f.description else ""]
-            fields.append(tmp_field)
-        fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
+        fields = self._makeFields(itm.fields)
 
         if itm.description:
             idx = fields.find("//") + 3
@@ -126,7 +124,7 @@ class JADNtoIDL(WriterBase):
         choice_idl += f"\n{fields}"
         return f"{choice_idl}\n}}\n"
 
-    def _formatEnumerated(self, itm):
+    def _formatEnumerated(self, itm: schema.definitions.Enumerated) -> str:
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -152,30 +150,19 @@ class JADNtoIDL(WriterBase):
         enumerated_idl += f"\n{fields}"
         return f"{enumerated_idl}\n}}\n"
 
-    def _formatMap(self, itm):
+    def _formatMap(self, itm: schema.definitions.Map) -> str:
         """
         Formats map for the given schema type
         :param itm: map to format
         :return: formatted map
         """
         map_idl = f"{itm.name} = Map"
-        if hasattr(itm.options, "minv") or hasattr(itm.options, "maxv"):
-            minv = itm.options.get('minv', 0)
-            maxv = itm.options.get('maxv', 0)
-            if minv > 0 or maxv > 0:
-                map_idl += f"{{{multiplicity(minv, maxv)}}}"
-        map_idl += " {"
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        if multi:
+            map_idl += f"{{{multi}}}"
 
-        fields = []
-        for i, f in enumerate(itm.fields):
-            fType = f"{f.type}" + (f"({f.options.get('vtype', 'String')})" if f.type == "ArrayOf" else (f"({f.options.get('ktype', 'String')}, {f.options.get('vtype', 'String')})" if f.type == "MapOf" else ""))
-            array = f"[{multiplicity(f.options.get('minc', 0), f.options.get('maxc', 0))}]" if self._is_array(f.options) else ""
-            fmt = f" /{f.options.format}" if hasattr(f.options, "format") else ""
-            opt = " optional" if self._is_optional(f.options) else ""
-            cont = ',' if i + 1 != len(itm.fields) else ''
-            tmp_field = [f.id, f.name, f"{fType}{array}{fmt}{'' if array else opt}{cont}", f"// {f.description}" if f.description else ""]
-            fields.append(tmp_field)
-        fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
+        map_idl += " {"
+        fields = self._makeFields(itm.fields)
 
         if itm.description:
             idx = fields.find("//") + 3
@@ -187,7 +174,7 @@ class JADNtoIDL(WriterBase):
         map_idl += f"\n{fields}"
         return f"{map_idl}\n}}\n"
 
-    def _formatMapOf(self, itm):
+    def _formatMapOf(self, itm: schema.definitions.MapOf) -> str:
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -195,30 +182,19 @@ class JADNtoIDL(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatRecord(self, itm):
+    def _formatRecord(self, itm: schema.definitions.Record) -> str:
         """
         Formats records for the given schema type
         :param itm: record to format
         :return: formatted record
         """
         record_idl = f"{itm.name} = Record"
-        if hasattr(itm.options, "minv") or hasattr(itm.options, "maxv"):
-            minv = itm.options.get('minv', 0)
-            maxv = itm.options.get('maxv', 0)
-            if minv > 0 or maxv > 0:
-                record_idl += f"{{{multiplicity(minv, maxv)}}}"
-        record_idl += " {"
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        if multi:
+            record_idl += f"{{{multi}}}"
 
-        fields = []
-        for i, f in enumerate(itm.fields):
-            fType = f"{f.type}" + (f"({f.options.get('vtype', 'String')})" if f.type == "ArrayOf" else (f"({f.options.get('ktype', 'String')}, {f.options.get('vtype', 'String')})" if f.type == "MapOf" else ""))
-            array = f"[{multiplicity(f.options.get('minc', 0), f.options.get('maxc', 0))}]" if self._is_array(f.options) else ""
-            fmt = f" /{f.options.format}" if hasattr(f.options, "format") else ""
-            opt = " optional" if self._is_optional(f.options) else ""
-            cont = ',' if i + 1 != len(itm.fields) else ''
-            tmp_field = [f.id, f.name, f"{fType}{array}{fmt}{'' if array else opt}{cont}", f"// {f.description}" if f.description else ""]
-            fields.append(tmp_field)
-        fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
+        record_idl += " {"
+        fields = self._makeFields(itm.fields)
 
         if itm.description:
             idx = fields.find("//") + 3
@@ -230,7 +206,7 @@ class JADNtoIDL(WriterBase):
         record_idl += f"\n{fields}"
         return f"{record_idl}\n}}\n"
 
-    def _formatCustom(self, itm):
+    def _formatCustom(self, itm: schema.definitions.Definition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -243,16 +219,47 @@ class JADNtoIDL(WriterBase):
         elif itm.type == "MapOf":
             itmType += f"({itm.options.get('ktype', 'String')}, {itm.options.get('vtype', 'String')})"
 
-        minv = itm.options.get('minv', 0)
-        maxv = itm.options.get('maxv', 0)
-        if minv > 0 or maxv > 0:
-            itmType += f"{{{multiplicity(minv, maxv)}}}"
+        opts = {} if itm.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
+        multi = itm.options.multiplicity(**opts)
+        if multi:
+            itmType += f"{{{multi}}}"
 
-        fmt = f" /{itm.options.format}" if hasattr(itm.options, "format") else ""
+        itmType += f"(%{itm.options.pattern}%)" if hasattr(itm.options, "pattern") else ""
+        itmType += f" /{itm.options.format}" if hasattr(itm.options, "format") else ""
 
-        return f"{itm.name} = {itmType}{fmt}{'  // '+itm.description if itm.description else ''}\n"
+        return f"{itm.name} = {itmType}{'  // '+itm.description if itm.description else ''}\n"
 
     # Helper Functions
+    def _makeFields(self, fields: List[schema.fields.Field]) -> str:
+        tmp_fields = []
+        for idx, field in enumerate(fields):
+            field_type = f"{field.type}"
+            if field.type == "ArrayOf":
+                field_type += f"({field.options.get('vtype', 'String')})"
+                field_type += f"{{{field.options.multiplicity(field=False)}}}"
+
+            elif field.type == "MapOf":
+                field_type += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
+                field_type += f"{{{field.options.multiplicity(field=False)}}}"
+            else:
+                mltiOpts = {} if field.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
+                multi = field.options.multiplicity(**mltiOpts)
+                multi_noCheck = field.options.multiplicity()
+                field_type += f"[{multi_noCheck}]" if self._is_array(field.options) else (f"{{{multi}}}" if multi else "")
+
+            fmt = f" /{field.options.format}" if hasattr(field.options, "format") else ""
+            pattern = f"(%{field.options.pattern}%)" if hasattr(field.options, "pattern") else ""
+            opt = " optional" if self._is_optional(field.options) else ""
+            cont = ',' if idx + 1 != len(fields) else ''
+
+            tmp_fields.append([
+                field.id,
+                field.name,
+                f"{field_type}{fmt}{pattern}{opt}{cont}",
+                f"// {field.description}" if field.description else ""
+            ])
+        return "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(tmp_fields)).split("\n"))
+
     def _makeTable(self, rows: List[List[Any]], alignment: list = None) -> str:
         table = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
         table.set_style(BeautifulTable.STYLE_NONE)

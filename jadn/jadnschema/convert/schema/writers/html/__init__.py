@@ -8,12 +8,9 @@ import re
 
 from datetime import datetime
 
-from ... import WriterBase
+from ...base import WriterBase
 
-from ..... import (
-    definitions,
-    schema
-)
+from ..... import schema
 
 
 class JADNtoHTML(WriterBase):
@@ -84,7 +81,7 @@ class JADNtoHTML(WriterBase):
         primitives = []
 
         for i, t in enumerate(self._types):
-            if definitions.is_structure(t.type):
+            if t.is_structure():
                 structure_html += getattr(self, f"_format{t.type}", lambda *a: "<h1>OOPS</h1>")(t, i+1)
             else:
                 primitives.append(t)
@@ -92,12 +89,13 @@ class JADNtoHTML(WriterBase):
         rows = []
         for prim in primitives:
             fmt = f" ({prim.options.format})" if "format" in prim.options else ""
-            minimum = prim.options.get("minv", 0)
-            maximum = prim.options.get("maxv", 0)
-            count = f" [{definitions.multiplicity(minimum, maximum)}]" if minimum > 0 or maximum > 0 else ""
+            multi = prim.options.multiplicity(0, 0, check=lambda x, y: x > 0 or y > 0)
+            if multi:
+                fmt += f" [{multi}]"
+
             rows.append({
                 **prim.dict(),
-                "type": f"{prim.type}{fmt}{count}",
+                "type": f"{prim.type}{fmt}",
             })
 
         primitives_table = self._makeTable(
@@ -145,7 +143,7 @@ class JADNtoHTML(WriterBase):
         arrayOf_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
         value_type = self.formatStr(itm.options.get('vtype', 'string'))
-        value_count = definitions.multiplicity(itm.options.get("minv", 0), itm.options.get("maxv", 0))
+        value_count = itm.options.multiplicity()
 
         options = f"<p>{self.formatStr(itm.name)} (ArrayOf({value_type})[{value_count}])</p>"
 
@@ -234,7 +232,7 @@ class JADNtoHTML(WriterBase):
 
         key_type = self.formatStr(itm.options.get('ktype', 'string'))
         value_type = self.formatStr(itm.options.get('vtype', 'string'))
-        value_count = definitions.multiplicity(itm.options.get("minv", 0), itm.options.get("maxv", 0))
+        value_count = itm.options.multiplicity()
 
         options = f"<p>{self.formatStr(itm.name)} (MapOf({key_type}, {value_type})[{value_count}])</p>"
 
@@ -388,7 +386,7 @@ class JADNtoHTML(WriterBase):
                     cell = cell[0] if len(cell) == 1 else ""
 
                 if column == "options" and isinstance(cell, schema.Options):
-                    cell_val = definitions.multiplicity(cell.get("minc", 1), cell.get("maxc", 1))
+                    cell_val = cell.multiplicity(1, 1, True)
 
                 else:
                     tmp_str = str(cell)

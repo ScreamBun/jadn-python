@@ -9,15 +9,15 @@ from . import (
 )
 
 
-def validate_schema(schema: Union[bytearray, dict, str]) -> Union[dict, List[Exception]]:
+def validate_schema(schema: Union[dict, str]) -> Union[dict, List[Exception]]:
     """
     Validate a JADN Schema
     :param schema: JADN schema to validate
     :return: list of errors or valid schema
     """
-    if isinstance(schema, (bytearray, str)):
-        schema = jadn.jadn_loads(schema)
-    jadn_analysis = jadn.jadn_analyze(schema)
+    if isinstance(schema, str):
+        schema = jadn.loads(schema)
+    jadn_analysis = jadn.analyze(schema)
 
     errs = []
 

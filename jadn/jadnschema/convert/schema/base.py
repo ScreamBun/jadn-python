@@ -20,8 +20,7 @@ from typing import (
 from . import enums
 
 from ... import (
-    definitions,
-    schema,
+    schema as jadn_schema,
     utils
 )
 
@@ -65,10 +64,10 @@ class ReaderBase(object):
         Schema Converter Init
         """
 
-    def load(self, fname: Union[BufferedIOBase, TextIOBase], *args, **kwargs) -> schema.Schema:
+    def load(self, fname: Union[BufferedIOBase, TextIOBase], *args, **kwargs) -> jadn_schema.Schema:
         raise NotImplemented(f"{self.__class__.__name__} does not implement `load` as a class function")
 
-    def loads(self, schema_str: Union[bytes, bytearray, str], *args, **kwargs) -> schema.Schema:
+    def loads(self, schema: Union[bytes, bytearray, str], *args, **kwargs) -> jadn_schema.Schema:
         raise NotImplemented(f"{self.__class__.__name__} does not implement `loads` as a class function")
 
 
@@ -83,7 +82,7 @@ class WriterBase(object):
     # Non Override
     _indent: str = ' ' * 2
 
-    _meta_order: Tuple[str] = definitions.META_ORDER
+    _meta_order: Tuple[str] = ('title', 'module', 'patch', 'description', 'exports', 'imports')
 
     _space_start = re.compile(r"^\s+", re.MULTILINE)
 
@@ -102,13 +101,13 @@ class WriterBase(object):
         :param jadn: str or dict of the JADN schema
         :param comm: Comment level
         """
-        jadn_schema = schema.Schema(jadn)
+        self._jadn_schema = jadn_schema.Schema(jadn)
         self.comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
 
-        self._meta = jadn_schema.meta
+        self._meta = self._jadn_schema.meta
         self._imports = dict(self._meta.get("imports", []))
-        self._types = jadn_schema.types.values()
-        self._customFields = {k: v.type for k, v in jadn_schema.types.items()}
+        self._types = self._jadn_schema.types.values()
+        self._customFields = {k: v.type for k, v in self._jadn_schema.types.items()}
 
     def dump(self, *args, **kwargs):
         raise NotImplemented(f"{self.__class__.__name__} does not implement `dump` as a class function")
@@ -125,7 +124,7 @@ class WriterBase(object):
         """
         structs = []
         for t in self._types:
-            df = getattr(self, f"_format{t.type if definitions.is_structure(t.type) else 'Custom'}", None)
+            df = getattr(self, f"_format{t.type if t.is_structure() else 'Custom'}", None)
             structs.append(df(t, *args, **kwargs) if df else default)
 
         return structs
@@ -141,24 +140,23 @@ class WriterBase(object):
             return 'unknown'
         elif len(escape_chars) > 0:
             return re.compile(rf"[{''.join(escape_chars)}]").sub('_', s)
-        else:
-            return s
+        return s
 
-    def _is_optional(self, opts: Union[dict, schema.Options]) -> bool:
+    def _is_optional(self, opts: Union[dict, jadn_schema.Options]) -> bool:
         """
         Check if the field is optional
         :param opts: field options
         :return: bool - optional
         """
-        return opts.get('minc', 1) == 0
+        return opts.get("minc", 1) == 0
 
-    def _is_array(self, opts: Union[dict, schema.Options]) -> bool:
+    def _is_array(self, opts: Union[dict, jadn_schema.Options]) -> bool:
         """
         Check if the field is an array
         :param opts: field options
         :return: bool - optional
         """
-        if hasattr(opts, 'ktype') or hasattr(opts, 'vtype'):
+        if "ktype" in opts or "vtype" in opts:
             return False
 
         return opts.get('maxc', 1) != 1

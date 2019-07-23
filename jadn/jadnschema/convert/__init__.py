@@ -7,6 +7,8 @@ __all__ = [
     # 'cddl_dumps',
     'html_dump',
     'html_dumps',
+    'jadn_dump',
+    'jadn_dumps',
     # 'jas_dump',
     # 'jas_dumps',
     'jidl_dump',

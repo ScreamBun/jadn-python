@@ -4,11 +4,12 @@ import os
 import sys
 
 from . import (
-    base,
-    # jadn
+    base
 )
-from jadn.jadnschema.convert.message import enums
-from .convert.message import Message
+from .convert.message import (
+    Message,
+    MessageFormats
+)
 
 
 def schema_file(path: str) -> dict:
@@ -41,7 +42,7 @@ def instance_file(path: str) -> dict:
     fname, ext = os.path.splitext(path)
     ext = ext[1:]
 
-    if ext in enums.MessageFormats.values():
+    if ext in MessageFormats.values():
         try:
             return dict(
                 path=path,
@@ -65,14 +66,9 @@ parser.add_argument(
     "-i", "--instance",
     action="append",
     dest="instance",
-    help=f"instance to validate (filename.[{','.join(enums.MessageFormats.values())}]) (May be specified multiple times)",
+    help=f"instance to validate (filename.[{','.join(MessageFormats.values())}]) (May be specified multiple times)",
     type=instance_file
 )
-
-
-def main(args: list = sys.argv[1:]) -> None:
-    arguments = vars(parser.parse_args(args=args or ["--help"]))
-    sys.exit(run(args=arguments))
 
 
 def run(args: dict, stdout=sys.stdout, stderr=sys.stderr) -> None:
@@ -94,3 +90,8 @@ def run(args: dict, stdout=sys.stdout, stderr=sys.stderr) -> None:
                     stdout.write(f"{err}\n")
             elif isinstance(val_msg, tuple):
                 stdout.write(f"Instance '{instance.get('path', '')}' is valid as {val_msg[1]}\n")
+
+
+def main(args: list = sys.argv[1:]) -> None:
+    arguments = vars(parser.parse_args(args=args or ["--help"]))
+    sys.exit(run(args=arguments))

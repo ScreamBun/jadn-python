@@ -3,11 +3,15 @@ JADN to Markdown tables
 """
 from beautifultable import BeautifulTable
 from datetime import datetime
+from typing import (
+    Callable,
+    Dict,
+    Union
+)
 
-from .. import WriterBase
+from ..base import WriterBase
 
 from .... import (
-    definitions,
     schema
 )
 
@@ -15,13 +19,13 @@ from .... import (
 class JADNtoMD(WriterBase):
     format = "md"
 
-    _alignment = {
+    _alignment: Dict[str, Callable[[str], str]] = {
         "^": lambda a: f":{a[1:-1]}:",
         "<": lambda a: f":{a[1:]}",
         ">": lambda a: f"{a[:-1]}:",
     }
 
-    def dump(self, fname, source="", comm=None):
+    def dump(self, fname: str, source: str = None, comm: str = None) -> None:
         """
         Convert the given JADN schema to MarkDown Tables
         :param fname: Name of file to write
@@ -34,7 +38,7 @@ class JADNtoMD(WriterBase):
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
             f.write(self.dumps(comm))
 
-    def dumps(self, comm=None):
+    def dumps(self, comm: str = None) -> str:
         """
         Convert the given JADN schema to MarkDown Tables
         :param comm: Level of comments to include in converted schema, ignored
@@ -42,7 +46,7 @@ class JADNtoMD(WriterBase):
         """
         return self.makeHeader() + "\n".join(self._makeStructures(default=""))
 
-    def makeHeader(self):
+    def makeHeader(self) -> str:
         """
         Create the headers for the schema
         :return: header for schema
@@ -62,7 +66,7 @@ class JADNtoMD(WriterBase):
         return f"## Schema\n{meta_table}\n"
 
     # Structure Formats
-    def _formatArray(self, itm):
+    def _formatArray(self, itm: schema.definitions.Array) -> str:
         """
         Formats array for the given schema type
         :param itm: array to format
@@ -81,7 +85,7 @@ class JADNtoMD(WriterBase):
         array_md += self._makeTable(headers, rows)
         return array_md
 
-    def _formatArrayOf(self, itm):
+    def _formatArrayOf(self, itm: schema.definitions.ArrayOf) -> str:
         """
         Formats arrayOf for the given schema type
         :param itm: arrayOf to format
@@ -89,7 +93,7 @@ class JADNtoMD(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatChoice(self, itm):
+    def _formatChoice(self, itm: schema.definitions.Choice) -> str:
         """
         Formats choice for the given schema type
         :param itm: choice to format
@@ -104,10 +108,11 @@ class JADNtoMD(WriterBase):
             '#': {'align': '>'},
             'Description': {}
         }
-        choice_md += self._makeTable(headers, itm.fields)
+        rows = [self._makeField(f) for f in itm.fields]
+        choice_md += self._makeTable(headers, rows)
         return choice_md
 
-    def _formatEnumerated(self, itm):
+    def _formatEnumerated(self, itm: schema.definitions.Enumerated) -> str:
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -131,17 +136,16 @@ class JADNtoMD(WriterBase):
         enumerated_md += self._makeTable(headers, rows)
         return enumerated_md
 
-    def _formatMap(self, itm):
+    def _formatMap(self, itm: schema.definitions.Map) -> str:
         """
         Formats map for the given schema type
         :param itm: map to format
         :return: formatted map
         """
         fmt = ".ID" if hasattr(itm.options, "id") else ""
-        minv = itm.options.get('minv', 0)
-        maxv = itm.options.get('maxv', 0)
-        if minv != 0 or maxv != 0:
-            fmt += f"{{{definitions.multiplicity(minv, maxv)}}}"
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        if multi:
+            fmt += f"{{{multi}}}"
 
         map_md = f"**_Type: {itm.name} (Map{fmt})_**\n\n"
         headers = {
@@ -151,22 +155,11 @@ class JADNtoMD(WriterBase):
             '#': {'align': '>'},
             'Description': {}
         }
-        rows = []
-        for field in itm.fields:
-            row = field.dict()
-            if field.type == "MapOf":
-                row['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
-            elif field.type == "ArrayOf":
-                row['type'] += f"({field.options.get('vtype', 'String')})"
-
-            if hasattr(field.options, "format"):
-                row['type'] += f" /{field.options.format}"
-            rows.append(row)
-
+        rows = [self._makeField(f) for f in itm.fields]
         map_md += self._makeTable(headers, rows)
         return map_md
 
-    def _formatMapOf(self, itm):
+    def _formatMapOf(self, itm: schema.definitions.MapOf) -> str:
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -174,17 +167,16 @@ class JADNtoMD(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatRecord(self, itm):
+    def _formatRecord(self, itm: schema.definitions.Record) -> str:
         """
         Formats records for the given schema type
         :param itm: record to format
         :return: formatted record
         """
         fmt = f" /{itm.options.format}" if hasattr(itm.options, 'format') else ""
-        minv = itm.options.get('minv', 0)
-        maxv = itm.options.get('maxv', 0)
-        if minv != 0 or maxv != 0:
-            fmt += f"{{{definitions.multiplicity(minv, maxv)}}}"
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        if multi:
+            fmt += f"{{{multi}}}"
 
         record_md = f"**_Type: {itm.name} (Record{fmt})_**\n\n"
         headers = {
@@ -194,10 +186,11 @@ class JADNtoMD(WriterBase):
             '#': {'align': '>'},
             'Description': {}
         }
-        record_md += self._makeTable(headers, itm.fields)
+        rows = [self._makeField(f) for f in itm.fields]
+        record_md += self._makeTable(headers, rows)
         return record_md
 
-    def _formatCustom(self, itm):
+    def _formatCustom(self, itm: schema.definitions.Definition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -209,30 +202,18 @@ class JADNtoMD(WriterBase):
             'Type Definition': {},
             'Description': {}
         }
+        field = self._makeField(itm)
         row = {
-            'Type Name': f"**{itm.name}**",
-            'Type Definition': itm.type,
-            'Description': itm.description
+            'Type Name': f"**{field['name']}**",
+            'Type Definition': field['type'],
+            'Description': field['description']
         }
-        if itm.type == "MapOf":
-            row['Type Definition'] += f"({itm.options.get('ktype', 'String')}, {itm.options.get('vtype', 'String')})"
-        elif itm.type == "ArrayOf":
-            row['Type Definition'] += f"({itm.options.get('vtype', 'String')})"
-
-        if hasattr(itm.options, "format"):
-            row['Type Definition'] += f" /{itm.options.format}"
-
-        if any([hasattr(itm.options, v) for v in ("minc", "maxc", "minv", "maxv")]):
-            multi = ("minc", "maxc") if hasattr(itm.options, "minc") else ("minv", "maxv")
-            minimum = itm.options.get(multi[0], 1)
-            maximum = itm.options.get(multi[1], 1)
-            row['Type Definition'] += f"{{{definitions.multiplicity(minimum, maximum)}}}"
 
         custom_md += self._makeTable(headers, [row])
         return custom_md
 
     # Helper Functions
-    def _makeTable(self, headers={}, rows=[]):
+    def _makeTable(self, headers: dict, rows: list) -> str:
         """
         Create a table using the given header and row values
         :param headers: table header names and attributes
@@ -256,7 +237,7 @@ class JADNtoMD(WriterBase):
                     cell = cell[0] if len(cell) == 1 else ''
 
                 if column == "options" and isinstance(cell, schema.Options):
-                    cell = definitions.multiplicity(cell.get("minc", 1), cell.get("maxc", 1))
+                    cell = cell.multiplicity(1, 1, True)
                     # TODO: More options
 
                 elif column == ("name", "value"):
@@ -270,3 +251,22 @@ class JADNtoMD(WriterBase):
         table_rows[1] = f"|{'|'.join(alignment)}|"
         table_md = '\n'.join(table_rows)
         return f"{table_md}\n"
+
+    def _makeField(self, field: Union[schema.definitions.Definition, schema.fields.Field]) -> Dict:
+        field_dict = field.dict()
+        if field.type == "MapOf":
+            field_dict['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
+        elif field.type == "ArrayOf":
+            field_dict['type'] += f"({field.options.get('vtype', 'String')})"
+
+        opts = {} if field.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
+        multi = field.options.multiplicity(**opts)
+        if multi:
+            field_dict['type'] += f"{{{multi}}}"
+
+        if hasattr(field.options, "pattern"):
+            field_dict['type'] += f"(%{field.options.pattern}%)"
+
+        if hasattr(field.options, "format"):
+            field_dict['type'] += f" /{field.options.format}"
+        return field_dict

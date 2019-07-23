@@ -6,9 +6,7 @@ from typing import Union
 
 from .base import (
     register_reader,
-    register_writer,
-    ReaderBase,
-    WriterBase
+    register_writer
 )
 
 from . import (
@@ -92,6 +90,11 @@ register_writer(fmt=writers.JADNtoHTML)
 html_dump = partial(dump, fmt="html")
 html_dumps = partial(dumps, fmt="html")
 
+# JADN
+register_writer(fmt=writers.JADNtoJADN)
+jadn_dump = partial(dump, fmt="jadn")
+jadn_dumps = partial(dumps, fmt="jadn")
+
 # JADN IDL
 register_writer(fmt=writers.JADNtoIDL)
 # register_reader(fmt=readers.IDLtoJADN)
@@ -114,14 +117,13 @@ md_dump = partial(dump, fmt="md")
 md_dumps = partial(dumps, fmt="md")
 
 __all__ = [
-    # Base
-    'ReaderBase',
-    'WriterBase',
     # Convert to ...
     # 'cddl_dump',
     # 'cddl_dumps',
     'html_dump',
     'html_dumps',
+    'jadn_dump',
+    'jadn_dumps',
     # 'jas_dump',
     # 'jas_dumps',
     'jidl_dump',
