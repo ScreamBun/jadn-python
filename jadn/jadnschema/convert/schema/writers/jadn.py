@@ -20,11 +20,11 @@ class JADNtoJADN(base.WriterBase):
         :param comm: Level of comments to include in converted schema
         :return: None
         """
-        comm = comm == enums.CommentLevels.NONE
+        self._comm = comm == enums.CommentLevels.NONE
         with open(fname, "w") as f:
             if source:
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
-            f.write(self.dumps(comm))
+            f.write(self.dumps(self._comm))
 
     def dumps(self, comm: str = None) -> str:
         """
@@ -32,5 +32,5 @@ class JADNtoJADN(base.WriterBase):
         :param comm: Level of comments to include in converted schema
         :return: JSON schema
         """
-        comm = comm == enums.CommentLevels.NONE
-        return self._jadn_schema.schema_pretty(comm)
+        self._comm = comm == enums.CommentLevels.NONE
+        return self._schema.schema_pretty(self._comm)

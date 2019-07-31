@@ -42,7 +42,7 @@ class JADNtoHTML(WriterBase):
         html = f"""<!DOCTYPE html>
             <html lang="en">
                 <head>
-                    <meta charset="UTF-8">
+                    <meta charset="UTF-8" />
                     <title>{self._meta.get("module", "JADN Schema Convert")} v.{self._meta.get("version", "0.0")}</title>
                     <style type="text/css">{self._loadStyles(styles)}</style>
                 </head>
@@ -67,7 +67,7 @@ class JADNtoHTML(WriterBase):
         def mkrow(k, v):
             if type(v) is list:
                 v = ", ".join(["**{}**: {}".format(*i) for i in v] if type(v[0]) is list else v) if len(v) > 0 else "N/A"
-            return f"<tr><td class='h'>{k}:</td><td class='s'>{v}</td></tr>"
+            return f"<tr><td class=\"h\">{k}:</td><td class=\"s\">{v}</td></tr>"
 
         meta_rows = "".join([mkrow(meta, self._meta.get(meta, "")) for meta in self._meta_order])
         return f"<table>{meta_rows}</table>"
@@ -82,33 +82,30 @@ class JADNtoHTML(WriterBase):
 
         for i, t in enumerate(self._types):
             if t.is_structure():
-                structure_html += getattr(self, f"_format{t.type}", lambda *a: "<h1>OOPS</h1>")(t, i+1)
+                structure_html += getattr(self, f"_format{t.type}", lambda *args: "<p>Oops...</p>")(t, i+1)
             else:
-                primitives.append(t)
+                mltiOpts = {} if t.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
+                multi = t.options.multiplicity(**mltiOpts)
+                multi = f"{{{multi}}}" if multi else ""
 
-        rows = []
-        for prim in primitives:
-            fmt = f" ({prim.options.format})" if "format" in prim.options else ""
-            multi = prim.options.multiplicity(0, 0, check=lambda x, y: x > 0 or y > 0)
-            if multi:
-                fmt += f" [{multi}]"
+                fmt = f" /{t.options.format}" if "format" in t.options else ""
 
-            rows.append({
-                **prim.dict(),
-                "type": f"{prim.type}{fmt}",
-            })
+                primitives.append(dict(
+                    Name=t.name,
+                    Definition=f"{t.type}{multi}{fmt}",
+                    Description=t.description
+                ))
 
         primitives_table = self._makeTable(
             headers=dict(
-                Name={"class": "s"},
-                Type={"class": "s"},
-                Description={"class": "s"}
+                Name={"class": "b"},
+                Definition={"class": "s"},
+                Description={"class": "d"}
             ),
-            rows=rows
+            rows=primitives
         )
-
-        primitive_html = f"<h2>3.3 Primitive Types</h2>{primitives_table}"
-        return structure_html + primitive_html
+        primitives_html = f"<h2>3.3 Primitive Types</h2>{primitives_table}"
+        return structure_html + primitives_html
 
     # Structure Formats
     def _formatArray(self, itm, idx):
@@ -127,7 +124,7 @@ class JADNtoHTML(WriterBase):
                 "#": {"class": "n"},
                 "Description": {"class": "s"},
             },
-            rows=[{**row.dict(), 'Description': f'"{row.name}": {row.description}'} for row in itm.fields],
+            rows=[schema.Field(row, description=f"\"{row.name}\": {row.description}") for row in itm.fields],
             caption=f"{self.formatStr(itm.name)} (Array)"
         )
 
@@ -139,13 +136,15 @@ class JADNtoHTML(WriterBase):
         :param itm: arrayOf to format
         :return: formatted arrayOf
         """
-        desc = "" if itm.description == "" else f'<h4>{itm.description}</h4>'
+        desc = "" if itm.description == "" else f"<h4>{itm.description}</h4>"
         arrayOf_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
-        value_type = self.formatStr(itm.options.get('vtype', 'string'))
-        value_count = itm.options.multiplicity()
+        value_type = self.formatStr(itm.options.get("vtype", "string"))
 
-        options = f"<p>{self.formatStr(itm.name)} (ArrayOf({value_type})[{value_count}])</p>"
+        multi = itm.options.multiplicity(0, 0, check=lambda x, y: x > 0 or y > 0)
+        multi = f"{{{multi}}}" if multi else ""
+
+        options = f"<p>{self.formatStr(itm.name)} (ArrayOf({value_type}){multi})</p>"
 
         arrayOf_html += options
         return arrayOf_html
@@ -162,9 +161,9 @@ class JADNtoHTML(WriterBase):
         choice_table = self._makeTable(
             headers={
                 "ID": {"class": "n"},
-                "Name": {"class": "s"},
+                "Name": {"class": "b"},
                 "Type": {"class": "s"},
-                "Description": {"class": "s"},
+                "Description": {"class": "d"},
             },
             rows=itm.fields,
             caption=f"{self.formatStr(itm.name)} (Choice{f' {json.dumps(itm.options.dict())}' if itm.options.dict().keys() else ''})"
@@ -182,14 +181,14 @@ class JADNtoHTML(WriterBase):
         enum_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
         if "id" in itm.options:
-            headers = {"Value": {'class': 'n'}}
-            rows = [{"Value": row.id, "Description": f"{row.value} -- {row.description}"} for row in itm.fields]
+            headers = {"ID": {"class": "n"}}
+            rows = [{"ID": row.id, "Description": f"<span class=\"b\">{row.value}</span>::{row.description}"} for row in itm.fields]
 
         else:
-            headers = {"ID": {"class": "n"}, "Name": {"class": "s"}}
+            headers = {"ID": {"class": "n"}, "Name": {"class": "b"}}
             rows = itm.fields
 
-        headers["Description"] = {"class": "s"}
+        headers["Description"] = {"class": "d"}
         enum_table = self._makeTable(
             headers=headers,
             rows=rows,
@@ -207,16 +206,19 @@ class JADNtoHTML(WriterBase):
         desc = "" if itm.description == "" else f"<h4>{itm.description}</h4>"
         map_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        multi = f"{{{multi}}}" if multi else ""
+
         map_table = self._makeTable(
             headers={
                 "ID": {"class": "n"},
-                "Name": {"class": "s"},
+                "Name": {"class": "b"},
                 "Type": {"class": "s"},
                 "#": {"class": "n"},
-                "Description": {"class": "s"},
+                "Description": {"class": "d"},
             },
             rows=itm.fields,
-            caption=f"{self.formatStr(itm.name)} (Map{f' {json.dumps(itm.options.dict())}' if itm.options.dict().keys() else ''})"
+            caption=f"{self.formatStr(itm.name)} (Map{multi})"
         )
 
         return map_html + map_table
@@ -227,11 +229,11 @@ class JADNtoHTML(WriterBase):
         :param itm: mapOf to format
         :return: formatted mapOf
         """
-        desc = "" if itm.description == "" else f'<h4>{itm.description}</h4>'
+        desc = "" if itm.description == "" else f"<h4>{itm.description}</h4>"
         mapOf_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
-        key_type = self.formatStr(itm.options.get('ktype', 'string'))
-        value_type = self.formatStr(itm.options.get('vtype', 'string'))
+        key_type = self.formatStr(itm.options.get("ktype", "string"))
+        value_type = self.formatStr(itm.options.get("vtype", "string"))
         value_count = itm.options.multiplicity()
 
         options = f"<p>{self.formatStr(itm.name)} (MapOf({key_type}, {value_type})[{value_count}])</p>"
@@ -247,17 +249,19 @@ class JADNtoHTML(WriterBase):
         """
         desc = "" if itm.description == "" else f"<h4>{itm.description}</h4>"
         record_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
+        multi = itm.options.multiplicity(check=lambda x, y: x > 0 or y > 0)
+        multi = f"{{{multi}}}" if multi else ""
 
         record_table = self._makeTable(
             headers={
                 "ID": {"class": "n"},
-                "Name": {"class": "s"},
+                "Name": {"class": "b"},
                 "Type": {"class": "s"},
                 "#": {"class": "n"},
-                "Description": {"class": "s"},
+                "Description": {"class": "d"},
             },
             rows=itm.fields,
-            caption=f"{self.formatStr(itm.name)} (Record)"
+            caption=f"{self.formatStr(itm.name)} (Record{multi})"
         )
 
         return record_html + record_table
@@ -350,7 +354,7 @@ class JADNtoHTML(WriterBase):
         else:
             raise IOError(f"The style file specified does not exist: {styles}")
 
-    def _makeTable(self, headers={}, rows=[], caption=""):
+    def _makeTable(self, headers: dict, rows: list, caption: str = ""):
         """
         Create a table using the given header and row values
         :param headers: table header names and attributes
@@ -366,8 +370,8 @@ class JADNtoHTML(WriterBase):
         # Headers
         column_headers = []
         for column, opts in headers.items():
-            attrs = " ".join(f"{arg}='{val}'" for arg, val in opts.items())
-            column_headers.append(f"<th {attrs}>{column}</th>")
+            attrs = " ".join(f"{arg}=\"{val}\"" for arg, val in opts.items())
+            column_headers.append(f"<th{' ' + attrs if attrs else ''}>{column}</th>")
 
         table_contents.append(f"<thead><tr>{''.join(column_headers)}</tr></thead>")
 
@@ -376,6 +380,7 @@ class JADNtoHTML(WriterBase):
         for row in rows:
             field_row = ""
             for column, opts in headers.items():
+                attrs = " ".join(f"{arg}=\"{val}\"" for arg, val in headers.get(column, {}).items())
                 has_column = column in row if isinstance(row, dict) else hasattr(row, column)
                 column = column if has_column else self._table_field_headers.get(column, column)
 
@@ -385,15 +390,20 @@ class JADNtoHTML(WriterBase):
                     cell = list(filter(None, [row.get(c, None) for c in column]))
                     cell = cell[0] if len(cell) == 1 else ""
 
-                if column == "options" and isinstance(cell, schema.Options):
-                    cell_val = cell.multiplicity(1, 1, True)
+                if column == "type" and isinstance(row, schema.Field):
+                    cell = f"{row.type}"
+                    cell += {
+                        "ArrayOf": lambda r: f"({r.options.get('vtype', 'String')})",
+                        "MapOf": lambda r: f"({r.options.get('ktype', 'String')}, {r.options.get('vtype', 'String')})",
+                        "String": lambda r: f"(%{r.options.pattern}%)" if hasattr(r.options, "pattern") else ""
+                    }.get(row.type, lambda x: "")(row)
+                    cell += f" /{row.options.format}" if hasattr(row.options, "format") else ""
 
-                else:
-                    tmp_str = str(cell)
-                    cell_val = " " if tmp_str == "" else tmp_str
+                elif column == "options" and isinstance(cell, schema.Options):
+                    cell = cell.multiplicity(1, 1, True)
 
-                attrs = " ".join(f"{arg}='{val}'" for arg, val in headers.get(column, {}).items())
-                field_row += f"<td {attrs}>{cell_val}</td>"
+                cell = str(cell)
+                field_row += f"<td{' ' + attrs if attrs else ''}>{' ' if cell == '' else cell}</td>"
 
             table_body.append(f"<tr>{field_row}</tr>")
         table_contents.append(f"<tbody>{''.join(table_body)}</tbody>")

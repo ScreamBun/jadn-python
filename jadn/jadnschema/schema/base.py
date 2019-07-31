@@ -42,7 +42,7 @@ class BaseModel(object):
         )
     }
 
-    _schema_types: Set[str] = {t for tn, jt in _jadn_types.items() for t in jt}
+    _schema_types: Set[str] = {t for jt in _jadn_types.values() for t in jt}
 
     def __init__(self, data: ModelData, **kwargs):
         if data:

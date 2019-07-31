@@ -25,6 +25,8 @@ from .... import (
 class JADNtoJSON(base.WriterBase):
     format = "json"
 
+    _hasBinary: bool = False
+
     _fieldMap: Dict[str, str] = {
         "Binary": "string",
         "Boolean": "bool",
@@ -37,7 +39,7 @@ class JADNtoJSON(base.WriterBase):
     _ignoreOpts: Tuple[str] = ("id", "ktype", "vtype")
 
     _jadn_fmt: Dict[str, dict] = {
-        "eui": {"pattern": r"^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}((:[0-9a-fA-F]{2}){2})?$"},
+        "eui": {"pattern": r"^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}(([:-][0-9a-fA-F]){2})?$"},
         "ipv4-net": {"pattern": r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])(\/(3[0-2]|[0-2]?[0-9]))?$"},
         "ipv6-net": {"pattern": r"^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))(%.+)?s*(\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8]))?$"},
         "i8": {"minimum": -128, "maximum": 127},
@@ -73,7 +75,7 @@ class JADNtoJSON(base.WriterBase):
 
     _schema_order: Tuple[str] = ("$schema", "$id", "title", "type", "$ref", "const", "description",
                                  "additionalProperties", "minProperties", "maxProperties", "minItems", "maxItems",
-                                 "oneOf", "required", "items", "format", "contentEncoding", "definitions")
+                                 "oneOf", "required", "items", "format", "contentEncoding", "properties", "definitions")
 
     _validationMap: Dict[str, Union[str, None]] = {
         # JADN: JSON
@@ -130,25 +132,39 @@ class JADNtoJSON(base.WriterBase):
         :return: JSON schema
         """
         self.comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
-
-        return self._cleanEmpty(dict(
+        json_schema = dict(
             **self.makeHeader(),
             type="object",
             oneOf=[{
                 "$ref": self.formatStr(f"#/definitions/{t.name}"),
                 "description": self._cleanComment(t.description or "<Fill Me In>")
-            } for t in self._types if t.name in self._meta.exports],
-            definitions={k: v for s in self._makeStructures(default={}) for k, v in s.items()}
-        ))
+            } for t in self._types if t.name in self._meta.exports]
+        )
+        defs = {k: v for s in self._makeStructures(default={}) for k, v in s.items()}
+
+        if self._hasBinary:
+            defs["Binary"] = dict(
+                title="Binary",
+                type="string",
+                contentEncoding="base64"
+            )
+
+        tmp_defs = {k: defs[k] for k in self._definition_order if k in defs}
+        tmp_defs.update({k: defs[k] for k in defs if k not in self._definition_order})
+
+        json_schema["definitions"] = tmp_defs
+        return self._cleanEmpty(json_schema)
 
     def makeHeader(self) -> dict:
         """
         Create the headers for the schema
         :return: header for schema
         """
+        module = self._meta.get('module', '')
+        schema_id = f"{'' if module.startswith('http') else 'http://'}{module}"
         return self._cleanEmpty({
             "$schema": "http://json-schema.org/draft-07/schema#",
-            "$id":  ("" if self._meta.get("module", "https").startswith("http") else "http://") + self._meta.get("module", ""),
+            "$id": schema_id if schema_id.endswith(".json") else f"{schema_id}.json",
             "title": self._meta.title if hasattr(self._meta, "title") else (self._meta.module + (f" v.{self._meta.patch}" if hasattr(self._meta, "patch") else "")),
             "description": self._cleanComment(self._meta.get("description", ""))
         })
@@ -193,6 +209,8 @@ class JADNtoJSON(base.WriterBase):
             description=self._cleanComment(itm.description),
             **self._optReformat("array", itm.options, False)
         )
+        if hasattr(itm.options, "unique"):
+            arrayof_def["unique"] = True
 
         if vtype.startswith("$"):
             val_def = list(filter(lambda d: d.name == vtype[1:], self._types))
@@ -275,7 +293,7 @@ class JADNtoJSON(base.WriterBase):
         :param itm: mapOf to format
         :return: formatted mapOf
         """
-        key_type = self._jadn_schema.types.get(itm.options.get("ktype"))
+        key_type = self._schema.types.get(itm.options.get("ktype"))
         if key_type.type in ("Choice", "Enumerated", "Map", "Record"):
             attr = "value" if key_type.type == "Enumerated" else "name"
             key_values = [getattr(f, attr) for f in key_type.get("fields", [])]
@@ -290,6 +308,7 @@ class JADNtoJSON(base.WriterBase):
                 type="object",
                 description=self._cleanComment(itm.description),
                 additionalProperties=False,
+                minProperties=1,
                 patternProperties={
                     keys: self._getFieldType(itm.options.get("vtype", "String"))
                 }
@@ -334,7 +353,8 @@ class JADNtoJSON(base.WriterBase):
             print(f"{itm.name} Key duplicate - {keys}")
             # map(opts.pop, keys)
 
-        if "pattern" in opts:
+        if any(k in opts for k in ("pattern", "format")):
+            custom_json.pop("$ref", None)
             custom_json.pop("format", None)
             custom_json["type"] = "string"
 
@@ -359,7 +379,6 @@ class JADNtoJSON(base.WriterBase):
         Reformat options for the given schema
         :param optType: type to reformat the options for
         :param opts: original options to reformat
-        :param numeric: is numeric type
         :return: dict - reformatted options
         """
         optType = optType.lower()
@@ -411,7 +430,11 @@ class JADNtoJSON(base.WriterBase):
             elif field.type in self._fieldMap:
                 rtn = {"type": self.formatStr(self._fieldMap.get(field.type, field.type))}
                 if field.type.lower() == "binary":
-                    rtn.update({"format": field.options.format} if "format" in field.options else {"contentEncoding": "base64url"})
+                    if getattr(field.options, "format", None) not in ("b", "binary", "x", None):
+                        rtn["format"] = field.options.format
+                    else:
+                        self._hasBinary = "Binary" not in self._customFields
+                        rtn = {"$ref": f"#/definitions/Binary"}
                 return rtn
 
         if field_type in self._customFields:
@@ -419,7 +442,9 @@ class JADNtoJSON(base.WriterBase):
 
         elif field_type in self._fieldMap:
             rtn = {"type": self.formatStr(self._fieldMap.get(field_type, field_type))}
-            rtn.update({"format": "binary"} if field_type.lower() == "binary" else {})
+            if field_type.lower() == "binary":
+                self._hasBinary = "Binary" not in self._customFields
+                rtn = {"$ref": f"#/definitions/Binary"}
             return rtn
 
         elif ":" in field_type:
@@ -429,7 +454,7 @@ class JADNtoJSON(base.WriterBase):
                 return {"$ref": f"{self._imports[src]}{fmt}#/{attr}"}
 
         elif re.match(r"^Enum\(.*?\)$", field_type):
-            f_type = self._jadn_schema.types.get(field_type[5:-1])
+            f_type = self._schema.types.get(field_type[5:-1])
             if f_type.type in ("Array", "Choice", "Map", "Record"):
                 return {
                     "type": "string",
@@ -464,6 +489,9 @@ class JADNtoJSON(base.WriterBase):
             **self._optReformat(field_type, field.options, base_ref=ref)
         )
         field_def.pop("title", None)
+        if field_def.get("type") != "string":
+            field_def.pop("format", None)
+
         return field_def
 
     def _cleanComment(self, msg: str, **kargs) -> str:
@@ -473,7 +501,7 @@ class JADNtoJSON(base.WriterBase):
         :param kargs: key/value comments
         :return: formatted comment
         """
-        if self.comm == enums.CommentLevels.NONE:
+        if self._comm == enums.CommentLevels.NONE:
             return ""
         return ("" if msg in ["", None, " "] else msg) + ''.join(f" #{k}:{json.dumps(v)}" for k, v in kargs.items())
 

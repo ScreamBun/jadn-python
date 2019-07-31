@@ -19,45 +19,68 @@ from .exceptions import OptionError
 
 class Options(BaseModel):
     # Type Structural
+    enum: str
     id: bool
     vtype: str
     ktype: str
-    enum: str
     # Type Validation
     format: str
-    pattern: str
     minv: int
     maxv: int
+    pattern: str
+    unique: bool
     # Field
+    default: str
+    flatten: bool
     minc: int
     maxc: int
     tfield: str  # Enumerated
-    flatten: bool
-    default: str
 
-    __slots__ = ("id", "ktype", "vtype", "enum", "format", "pattern", "minv", "maxv", "minc", "maxc", "tfield", "flatten", "default")
+    _options: Dict[str, List[str]] = {
+        "field": (
+            "default",
+            "flatten",
+            "minc",
+            "maxc",
+            "tfield"
+        ),
+        "type": (
+            # Structural
+            "enum",
+            "id",
+            "ktype",
+            "vtype",
+            # Validation
+            "format",
+            "pattern",
+            "minv",
+            "maxv",
+            "unique"
+        )
+    }
 
-    _fieldOpts: Tuple[str] = ("minc", "maxc", "tfield", "flatten", "default")
+    # _fieldOpts: Tuple[str] = ("minc", "maxc", "tfield", "flatten", "default")
 
-    _boolOpts: Tuple[str] = ("id", "flatten")
+    _boolOpts: Tuple[str] = ("id", "flatten", "unique")
 
     _ids: Dict[str, str] = {
         # Type Structural
+        "$": "enum",        # Enumerated type derived from the specified Array, Choice, Map or Record type
         "=": "id",          # If present, Enumerated values and fields of compound types are denoted by FieldID rather than FieldName
         "+": "ktype",       # Key type for MapOf
         "*": "vtype",       # Value type for ArrayOf and MapOf
-        "$": "enum",        # Enumerated type derived from the specified Array, Choice, Map or Record type
         # Type Validation
         "/": "format",      # Semantic validation keyword
-        "%": "pattern",     # Regular expression used to validate a String type
         "{": "minv",        # Minimum numeric value, octet or character count, or element count
         "}": "maxv",        # Maximum numeric value, octet or character count, or element count
+        "%": "pattern",     # Regular expression used to validate a String type
+        "u": "unique",      # If present, an ArrayOf instance must not contain duplicate values
         # Field Structural
+        "!": "default",     # Reserved for default value Section 3.2.2.4
+        "<": "flatten",     # Use FieldName as a qualifier for fields in FieldType
         "[": "minc",        # Minimum cardinality
         "]": "maxc",        # Maximum cardinality
         "&": "tfield",      # Field that specifies the type of this field, value is Enumerated
-        "<": "flatten",     # Use FieldName as a qualifier for fields in FieldType
-        "!": "default",     # Reserved for default value Section 3.2.2.4
     }
 
     _validFormats: List[str] = [
@@ -107,13 +130,15 @@ class Options(BaseModel):
         "String": ("format", "minv", "maxv", "pattern"),
         # Structures
         "Array": ("format", "minv", "maxv"),
-        "ArrayOf": ("minv", "maxv", "vtype"),
+        "ArrayOf": ("minv", "maxv", "vtype", "unique"),
         "Choice": ("id", ),
         "Enumerated": ("id", "enum"),
         "Map": ("id", "minv", "maxv"),
         "MapOf": ("ktype", "minv", "maxv", "vtype"),
         "Record": ("minv", "maxv")
     }
+
+    __slots__ = tuple(o for ot in _options.values() for o in ot)
 
     def __init__(self, data: Union[dict, list, "Options"] = None, **kwargs):
         if isinstance(data, list):
@@ -154,7 +179,7 @@ class Options(BaseModel):
         :return: OPTIONAL(list of errors)
         """
         errors = []
-        valid_opts = (*self._validOptions.get(basetype, ()), *(self._fieldOpts if field else ()))
+        valid_opts = (*self._validOptions.get(basetype, ()), *(self._options["field"] if field else ()))
         opts = {o: getattr(self, o) for o in self.__slots__ if hasattr(self, o)}
         keys = {*opts.keys()} - {*valid_opts}
         loc = f"{defname}({basetype})" if defname else basetype

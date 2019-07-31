@@ -80,6 +80,15 @@ class WriterBase(object):
     escape_chars: Tuple[str] = (' ', )
 
     # Non Override
+    _definition_order: Tuple[str] = ("OpenC2-Command", "OpenC2-Response", "Action", "Target", "Actuator", "Args",
+                                     "Status-Code", "Results", "Artifact", "Device", "Domain-Name", "Email-Addr",
+                                     "Features", "File", "IDN-Domain-Name", "IDN-Email-Addr", "IPv4-Net",
+                                     "IPv4-Connection", "IPv6-Net", "IPv6-Connection", "IRI", "MAC-Addr", "Process",
+                                     "Properties", "URI", "Action-Targets", "Targets", "Date-Time", "Duration",
+                                     "Feature", "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr",
+                                     "L4-Protocol", "Message-Type", "Nsid", "Payload", "Port", "Response-Type",
+                                     "Version", "Binary", "Command-ID")
+
     _indent: str = ' ' * 2
 
     _meta_order: Tuple[str] = ('title', 'module', 'patch', 'description', 'exports', 'imports')
@@ -95,19 +104,19 @@ class WriterBase(object):
         'Value': 'value'
     })
 
-    def __init__(self, jadn: Union[dict, str], comm: str = enums.CommentLevels.ALL) -> None:
+    def __init__(self, jadn: Union[dict, str, jadn_schema.Schema], comm: str = enums.CommentLevels.ALL) -> None:
         """
         Schema Converter Init
-        :param jadn: str or dict of the JADN schema
+        :param jadn: str/dict/Schema of the JADN schema
         :param comm: Comment level
         """
-        self._jadn_schema = jadn_schema.Schema(jadn)
-        self.comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
+        self._schema = jadn if isinstance(jadn, jadn_schema.Schema) else jadn_schema.Schema(jadn)
+        self._comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
 
-        self._meta = self._jadn_schema.meta
+        self._meta = self._schema.meta
         self._imports = dict(self._meta.get("imports", []))
-        self._types = self._jadn_schema.types.values()
-        self._customFields = {k: v.type for k, v in self._jadn_schema.types.items()}
+        self._types = self._schema.types.values()
+        self._customFields = {k: v.type for k, v in self._schema.types.items()}
 
     def dump(self, *args, **kwargs):
         raise NotImplemented(f"{self.__class__.__name__} does not implement `dump` as a class function")

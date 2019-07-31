@@ -36,7 +36,7 @@ class JADNtoMD(WriterBase):
         with open(fname, "w") as f:
             if source:
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
-            f.write(self.dumps(comm))
+            f.write(self.dumps())
 
     def dumps(self, comm: str = None) -> str:
         """

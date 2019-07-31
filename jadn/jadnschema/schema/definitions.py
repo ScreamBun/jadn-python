@@ -35,6 +35,9 @@ class Definition(BaseModel):
         super(Definition, self).__init__(data, **kwargs)
         has_fields = hasattr(self, "fields")
 
+        if getattr(self, "name", None) in (t for jt in self._jadn_types.values() for t in jt):
+            raise FormatError(f"{self.name}({self.type}) cannot be the name of a JADN type")
+
         if self.is_compound() and not has_fields:
             raise FormatError(f"{self.name}({self.type}) must have defined fields")
 
@@ -78,7 +81,8 @@ class Definition(BaseModel):
                 if field.type in ("ArrayOf", "MapOf"):
                     deps.update(optionDeps(field))
                 elif not self.is_builtin(field.type):
-                    deps.add(field.type)
+                    if field.type != self.name:
+                        deps.add(field.type)
 
         return deps
 

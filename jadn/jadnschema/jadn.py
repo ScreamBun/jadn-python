@@ -37,6 +37,9 @@ def check_schema(schema: Union[dict, str]) -> jadn_schema.Schema:
     if errors:
         raise Exception(errors)
 
+    for k, v in schema_obj.analyze().items():
+        print(f"{k}: {v}")
+
     return schema_obj
 
 
