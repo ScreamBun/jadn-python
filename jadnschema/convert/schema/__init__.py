@@ -85,6 +85,13 @@ def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN, *args, 
 
 
 # Add format reader/writers
+# CDDL
+# register_writer(fmt=writers.JADNtoCDDL)
+# cddl_dump = partial(dump, fmt="cddl")
+# cddl_dumps = partial(dumps, fmt="cddl")
+# cddl_load = partial(load, fmt="cddl")
+# cddl_loads = partial(loads, fmt="cddl")
+
 # HTML
 register_writer(fmt=writers.JADNtoHTML)
 html_dump = partial(dump, fmt="html")
@@ -94,6 +101,8 @@ html_dumps = partial(dumps, fmt="html")
 register_writer(fmt=writers.JADNtoJADN)
 jadn_dump = partial(dump, fmt="jadn")
 jadn_dumps = partial(dumps, fmt="jadn")
+# jadn_load = partial(load, fmt="jadn")
+# jadn_loads = partial(loads, fmt="jadn")
 
 # JADN IDL
 register_writer(fmt=writers.JADNtoIDL)
@@ -115,6 +124,27 @@ json_dumps = partial(dumps, fmt="json")
 register_writer(fmt=writers.JADNtoMD)
 md_dump = partial(dump, fmt="md")
 md_dumps = partial(dumps, fmt="md")
+
+# ProtoBuf
+# register_writer(fmt=writers.JADNtoProto)
+# proto_dump = partial(dump, fmt="proto")
+# proto_dumps = partial(dumps, fmt="proto")
+# proto_load = partial(load, fmt="proto")
+# proto_loads = partial(loads, fmt="proto")
+
+# Relax-NG
+# register_writer(fmt=writers.JADNtoRelax)
+# relax_dump = partial(dump, fmt="relax")
+# relax_dumps = partial(dumps, fmt="relax")
+# relax_load = partial(load, fmt="relax")
+# relax_loads = partial(loads, fmt="relax")
+
+# Thrift
+# register_writer(fmt=writers.JADNtoThrift)
+# thrift_dump = partial(dump, fmt="thrift")
+# thrift_dumps = partial(dumps, fmt="thrift")
+# thrift_load = partial(load, fmt="thrift")
+# thrift_loads = partial(loads, fmt="thrift")
 
 __all__ = [
     # Convert to ...
@@ -138,9 +168,11 @@ __all__ = [
     # 'relax_dumps',
     # 'thrift_dump',
     # 'thrift_dumps',
-    # Convert From ...
+    # Load From ...
     # 'cddl_load',
     # 'cddl_loads',
+    # 'jadn_load',
+    # 'jadn_loads',
     # 'jas_load',
     # 'jas_loads',
     # 'jidl_load',

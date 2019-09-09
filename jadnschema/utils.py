@@ -94,6 +94,13 @@ class FrozenDict(ObjectDict):
 
 
 # Util Functions
+def addKey(d: dict, k: str = None) -> Callable:
+    def wrapped(fun: Callable, k: str = k) -> Callable:
+        d[k if k else fun.__name__] = fun
+        return fun
+    return wrapped
+
+
 def toStr(s: Any) -> str:
     """
     Convert a given type to a default string

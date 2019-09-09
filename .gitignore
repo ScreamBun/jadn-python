@@ -196,4 +196,4 @@ fabric.properties
 
 # Custom Ignore
 .idea
-jadn/tests/schema_gen
+tests/schema_gen

@@ -10,6 +10,8 @@ from io import (
     TextIOBase
 )
 from typing import (
+    Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -19,7 +21,11 @@ from typing import (
 
 from .base import BaseModel
 from .definitions import Definition
-from .exceptions import FormatError
+from .exceptions import (
+    FormatError,
+    ValidationError
+)
+from .formats import ValidationFormats
 
 
 class Meta(BaseModel):
@@ -50,14 +56,20 @@ class Meta(BaseModel):
 class Schema(BaseModel):
     meta: Meta
     types: Dict[str, Definition]
+    _formats = Dict[str, Callable]
+    _types: Dict[str, Definition]
 
     __slots__ = ("meta", "types")
 
     def __init__(self, schema: Union[dict, "Schema"] = None, **kwargs):
+        kwargs["_schema"] = self
         super(Schema, self).__init__(schema, **kwargs)
+        self._formats = ValidationFormats
+        self._types = {}
 
         if schema:
-            for type_name, type_def in self.types.items():
+            for type_name, type_def in tuple(self.types.items()):
+                type_def.process_options()
                 self._schema_types.update(type_def.fieldtypes)
             self.verify_schema()
 
@@ -69,6 +81,10 @@ class Schema(BaseModel):
         """
         return tuple(self._schema_types)
 
+    @property
+    def formats(self):
+        return tuple(self._formats.keys())
+
     def analyze(self) -> dict:
         """
         Analyze the given schema for unreferenced and undefined types
@@ -76,12 +92,12 @@ class Schema(BaseModel):
         """
         type_deps = self.dependencies()
         refs = {dep for tn, td in type_deps.items() for dep in td}.union({*self.meta.get("exports", [])})
-        types = {*type_deps.keys()}
+        types = {*type_deps.keys()}.union(self._types.keys())
 
         return dict(
             module=f"{self.meta.get('module', '')}{self.meta.get('patch', '')}",
             exports=self.meta.get('exports', []),
-            unreferenced=list(types.difference(refs)),
+            unreferenced=list(types.difference(refs).difference(self._types.keys())),
             undefined=list(refs.difference(types))
         )
 
@@ -90,7 +106,7 @@ class Schema(BaseModel):
         Determine the dependencies for each type within the schema
         :return: dictionary of dependencies
         """
-        nsids = [n[0] for n in self.meta.imports]
+        nsids = [n[0] for n in self.meta.get("imports", [])]
         type_deps = {imp: set() for imp in nsids}
 
         def ns(name: str) -> str:
@@ -111,9 +127,10 @@ class Schema(BaseModel):
         :param strip: strip comments from schema
         :return: JADN formatted schema
         """
+        # schema_types = [v for k, v in self.types.items() if not k.startswith("_")]
         return dict(
             meta=self.meta.schema(),
-            types=[getattr(t, f"schema{'_strip' if strip else ''}")() for n, t in self.types.items()]
+            types=[getattr(t, f"schema{'_strip' if strip else ''}")() for t in self.types.values()]
         )
 
     def schema_pretty(self, strip: bool = False, indent: int = 2) -> str:
@@ -185,6 +202,7 @@ class Schema(BaseModel):
         """
         return self._dumps(self.schema(strip=strip), indent)
 
+    # Validation
     def verify_schema(self, silent=False) -> Optional[List[Exception]]:
         """
         Verify the schema is proper
@@ -214,6 +232,33 @@ class Schema(BaseModel):
             else:
                 raise errors[0]
 
+    def validate(self, inst: dict, silent: bool = True) -> Optional[Exception]:
+        for exp in self.meta.exports:
+            rtn = self.validate_as(inst, exp)
+            if not rtn:
+                return
+
+        err = ValidationError(f"instance not valid as under the current schema")
+        if silent:
+            return err
+        else:
+            raise err
+
+    def validate_as(self, inst: dict, _type: str, silent: bool = True) -> Optional[List[Exception]]:
+        errors = []
+        if _type in self.meta.exports:
+            rtn = self.types.get(_type).validate(inst)
+            if rtn and len(rtn) != 0:
+                errors.extend(rtn or [])
+        else:
+            errors.append(ValidationError(f"invalid export type, {_type}"))
+
+        errors = list(filter(None, errors))
+        if silent and errors:
+            return errors
+        elif not silent and errors:
+            raise errors[0]
+
     # Helper Functions
     def _setSchema(self, data: dict) -> None:
         """
@@ -223,10 +268,11 @@ class Schema(BaseModel):
         """
         if not isinstance(data, (dict, type(self))):
             raise TypeError("Cannot load schema, incorrect type")
+        kwargs = {"_schema": self}
+        super(Schema, self).__init__(data, **kwargs)
 
-        super(Schema, self).__init__(data)
-
-        for type_name, type_def in self.types.items():
+        for type_name, type_def in tuple(self.types.items()):
+            type_def.process_options()
             self._schema_types.update(type_def.fieldtypes)
         self.verify_schema()
 
@@ -260,4 +306,15 @@ class Schema(BaseModel):
         else:
             return "???"
 
+    def addFormat(self, fmt: str, fun: Callable[[Any], Optional[List[Exception]]], override: bool = False) -> None:
+        """
+        Add a format validation function
+        :param fmt: format to validate
+        :param fun: function that performs the validation
+        :param override: override the format if it exists
+        :return: None
+        """
+        if fmt in self.formats and not override:
+            raise FormatError(f"format {fmt} is already defined, user arg `override=True` to override format validation")
+        self._formats[fmt] = fun
 

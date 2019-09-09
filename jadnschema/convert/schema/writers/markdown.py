@@ -8,6 +8,10 @@ from typing import (
     Dict,
     Union
 )
+from jadnschema.schema import (
+    definitions,
+    fields
+)
 
 from ..base import WriterBase
 
@@ -66,7 +70,7 @@ class JADNtoMD(WriterBase):
         return f"## Schema\n{meta_table}\n"
 
     # Structure Formats
-    def _formatArray(self, itm: schema.definitions.Array) -> str:
+    def _formatArray(self, itm: definitions.Array) -> str:
         """
         Formats array for the given schema type
         :param itm: array to format
@@ -85,7 +89,7 @@ class JADNtoMD(WriterBase):
         array_md += self._makeTable(headers, rows)
         return array_md
 
-    def _formatArrayOf(self, itm: schema.definitions.ArrayOf) -> str:
+    def _formatArrayOf(self, itm: definitions.ArrayOf) -> str:
         """
         Formats arrayOf for the given schema type
         :param itm: arrayOf to format
@@ -93,7 +97,7 @@ class JADNtoMD(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatChoice(self, itm: schema.definitions.Choice) -> str:
+    def _formatChoice(self, itm: definitions.Choice) -> str:
         """
         Formats choice for the given schema type
         :param itm: choice to format
@@ -112,7 +116,7 @@ class JADNtoMD(WriterBase):
         choice_md += self._makeTable(headers, rows)
         return choice_md
 
-    def _formatEnumerated(self, itm: schema.definitions.Enumerated) -> str:
+    def _formatEnumerated(self, itm: definitions.Enumerated) -> str:
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -136,7 +140,7 @@ class JADNtoMD(WriterBase):
         enumerated_md += self._makeTable(headers, rows)
         return enumerated_md
 
-    def _formatMap(self, itm: schema.definitions.Map) -> str:
+    def _formatMap(self, itm: definitions.Map) -> str:
         """
         Formats map for the given schema type
         :param itm: map to format
@@ -159,7 +163,7 @@ class JADNtoMD(WriterBase):
         map_md += self._makeTable(headers, rows)
         return map_md
 
-    def _formatMapOf(self, itm: schema.definitions.MapOf) -> str:
+    def _formatMapOf(self, itm: definitions.MapOf) -> str:
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -167,7 +171,7 @@ class JADNtoMD(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatRecord(self, itm: schema.definitions.Record) -> str:
+    def _formatRecord(self, itm: definitions.Record) -> str:
         """
         Formats records for the given schema type
         :param itm: record to format
@@ -190,7 +194,7 @@ class JADNtoMD(WriterBase):
         record_md += self._makeTable(headers, rows)
         return record_md
 
-    def _formatCustom(self, itm: schema.definitions.Definition) -> str:
+    def _formatCustom(self, itm: definitions.Definition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -220,39 +224,41 @@ class JADNtoMD(WriterBase):
         :param rows: row values
         :return: formatted MarkDown table
         """
-        table_md = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
-        table_md.set_style(BeautifulTable.STYLE_MARKDOWN)
-        table_md.column_headers = list(headers.keys())
+        table_md = ""
+        if rows:
+            table_md = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
+            table_md.set_style(BeautifulTable.STYLE_MARKDOWN)
+            table_md.column_headers = list(headers.keys())
 
-        for row in rows:
-            tmp_row = []
-            for column in table_md.column_headers:
-                has_column = column in row if isinstance(row, dict) else hasattr(row, column)
-                column = column if has_column else self._table_field_headers.get(column, column)
+            for row in rows:
+                tmp_row = []
+                for column in table_md.column_headers:
+                    has_column = column in row if isinstance(row, dict) else hasattr(row, column)
+                    column = column if has_column else self._table_field_headers.get(column, column)
 
-                if isinstance(column, str):
-                    cell = row.get(column, '')
-                else:
-                    cell = list(filter(None, [row.get(c, None) for c in column]))
-                    cell = cell[0] if len(cell) == 1 else ''
+                    if isinstance(column, str):
+                        cell = row.get(column, '')
+                    else:
+                        cell = list(filter(None, [row.get(c, None) for c in column]))
+                        cell = cell[0] if len(cell) == 1 else ''
 
-                if column == "options" and isinstance(cell, schema.Options):
-                    cell = cell.multiplicity(1, 1, True)
-                    # TODO: More options
+                    if column == "options" and isinstance(cell, schema.Options):
+                        cell = cell.multiplicity(1, 1, True)
+                        # TODO: More options
 
-                elif column == ("name", "value"):
-                    cell = f"**{cell}**"
-                tmp_row.append(cell)
-            table_md.append_row(tmp_row)
+                    elif column == ("name", "value"):
+                        cell = f"**{cell}**"
+                    tmp_row.append(cell)
+                table_md.append_row(tmp_row)
 
-        table_rows = str(table_md).split("\n")
-        head = dict(zip([h.strip() for h in table_rows[0].split("|")], table_rows[1].split("|")))
-        alignment = [self._alignment.get(headers[k].get("align", "<"))(v)  for k, v in head.items() if k]
-        table_rows[1] = f"|{'|'.join(alignment)}|"
-        table_md = '\n'.join(table_rows)
+            table_rows = str(table_md).split("\n")
+            head = dict(zip([h.strip() for h in table_rows[0].split("|")], table_rows[1].split("|")))
+            alignment = [self._alignment.get(headers[k].get("align", "<"))(v) for k, v in head.items() if k]
+            table_rows[1] = f"|{'|'.join(alignment)}|"
+            table_md = '\n'.join(table_rows)
         return f"{table_md}\n"
 
-    def _makeField(self, field: Union[schema.definitions.Definition, schema.fields.Field]) -> Dict:
+    def _makeField(self, field: Union[definitions.Definition, fields.Field]) -> Dict:
         field_dict = field.dict()
         if field.type == "MapOf":
             field_dict['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"

@@ -1,5 +1,5 @@
 # from .base import validate_schema, validate_instance
-from .convert.message import MessageFormats
+# from .convert.message import MessageFormats
 from .convert.schema.enums import (
     CommentLevels,
     SchemaFormats
@@ -8,7 +8,7 @@ from .convert.schema.enums import (
 __all__ = [
     # Enums
     'CommentLevels',
-    'MessageFormats',
+    # 'MessageFormats',
     'SchemaFormats',
     # Validation
     # 'validate_schema',

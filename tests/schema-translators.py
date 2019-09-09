@@ -60,7 +60,7 @@ class Conversions(object):
         # convert.json_load(open(os.path.join(self._test_dir, self._schema + '.all.json'), 'rb').read(), os.path.join(self._test_dir, self._schema + '.json.jadn'))
 
     def MarkDown(self):
-        print("Convert: JADN --> MarkDown Tables")
+        print("Convert: JADN --> MarkDown")
         convert.md_dump(schema=self._schema_obj, fname=os.path.join(self._test_dir, self._schema + '.md'))
 
     def ProtoBuf(self):
@@ -96,11 +96,10 @@ class Conversions(object):
 
 
 if __name__ == '__main__':
-    schema = 'oc2ls-v1.0-csprd03'
     # schema = 'oc2ls-v1.0-csprd03'
+    schema = 'oc2ls-v1.0-wd14_update'
     conversions = Conversions(schema)
     validConvert = (
-        "Analyze",
         "HTML",
         "JADN",
         "JIDL",
@@ -108,6 +107,9 @@ if __name__ == '__main__':
         "MarkDown",
         "prettyFormat"
     )
+
+    conversions.Analyze()
+    print("\n")
 
     for conv in dir(conversions):
         if not conv.startswith('_') and conv in validConvert:

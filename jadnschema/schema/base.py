@@ -20,6 +20,8 @@ ModelData = Union[dict, list, "BaseModel"]
 class BaseModel(object):
     _iter_idx: int
 
+    # Helper Variables
+    _schema: "Schema"
     _jadn_types: Dict[str, Tuple[str]] = {
         "Simple": (
             "Binary",       # A sequence of octets. Length is the number of octets
@@ -45,23 +47,26 @@ class BaseModel(object):
     _schema_types: Set[str] = {t for jt in _jadn_types.values() for t in jt}
 
     def __init__(self, data: ModelData, **kwargs):
+        schema = kwargs.pop("_schema", None)
         if data:
-            values, errs = init_model(self, data)
+            values, errs = init_model(self, data, schema)
+            if errs:
+                raise errs[0]
         else:
             values = {}
 
         kw_vals = {k: v for k, v in kwargs.items() if k in self.__slots__}
         values.update(kw_vals)
-        values, errs = init_model(self, values)
+        values, errs = init_model(self, values, schema)
 
         for k, v in values.items():
             setattr(self, k, v)
 
     def __setattr__(self, key, val):
-        if key in self.__slots__:
+        if key in self.__slots__ or key.startswith("_"):
             if hasattr(self, f"check_{key}"):
                 val = getattr(self, f"check_{key}")(val)
-            check_type(key, val, self.__annotations__.get(key))
+            check_type(key, val, self.__annotations__.get(key, Any))
             super(BaseModel, self).__setattr__(key, val)
         else:
             raise AttributeError(f"{self.__class__.__name__}.{key} is not a valid attribute that can be set by a user")
@@ -79,6 +84,9 @@ class BaseModel(object):
 
     def __contains__(self, key):
         return key in self.__slots__ and hasattr(self, key)
+
+    def __hash__(self) -> int:
+        return hash(self.__repr__())
 
     def dict(self) -> dict:
         """
@@ -113,7 +121,7 @@ class BaseModel(object):
     # Helper functions
 
 
-def init_model(model: BaseModel, input_data: ModelData, silent: bool = True) -> Tuple[dict, Optional[List[Exception]]]:
+def init_model(model: BaseModel, input_data: ModelData, _schema: "Schema" = None, silent: bool = True) -> Tuple[dict, Optional[List[Exception]]]:
     """
     Validate data against a model
     :param model: model class the data is being validated against
@@ -127,6 +135,9 @@ def init_model(model: BaseModel, input_data: ModelData, silent: bool = True) -> 
     fields = {}
     errors = []
 
+    if _schema:
+        fields["_schema"] = _schema
+
     if model_class == "Schema":
         if "meta" in input_data and isinstance(input_data.get("meta"), dict):
             from .schema import Meta
@@ -134,7 +145,7 @@ def init_model(model: BaseModel, input_data: ModelData, silent: bool = True) -> 
 
         if "types" in input_data and isinstance(input_data.get("types"), list):
             from .definitions import make_definition
-            input_data["types"] = {t[0]: make_definition(t) for t in input_data.get("types", [])}
+            input_data["types"] = {t[0]: make_definition(t, _schema=_schema) for t in input_data.get("types", [])}
 
     else:
         if "options" in input_data and isinstance(input_data.get("options"), list):
@@ -150,7 +161,7 @@ def init_model(model: BaseModel, input_data: ModelData, silent: bool = True) -> 
         if "fields" in input_data and isinstance(input_data.get("fields"), list):
             from .fields import EnumeratedField, Field
             field = EnumeratedField if basetype == "Enumerated" else Field
-            input_data["fields"] = [field(f) for f in input_data["fields"]]
+            input_data["fields"] = [field(f, _schema=_schema) for f in input_data["fields"]]
 
     for var, val in input_data.items():
         inst = model.__annotations__.get(var)

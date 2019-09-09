@@ -12,6 +12,11 @@ from typing import (
     Union
 )
 
+from jadnschema.schema import (
+    definitions,
+    fields
+)
+
 from .. import (
     base,
     enums
@@ -50,7 +55,8 @@ class JADNtoJSON(base.WriterBase):
     _optKeys: Dict[Tuple[str], Dict[str, str]] = {
         ("array",): {
             "minv": "minItems",
-            "maxv": "maxItems"
+            "maxv": "maxItems",
+            "unique": "uniqueItems"
         },
         ("integer", "number"): {
             "minc": "minimum",
@@ -170,7 +176,7 @@ class JADNtoJSON(base.WriterBase):
         })
 
     # Structure Formats
-    def _formatArray(self, itm: schema.definitions.Array) -> dict:
+    def _formatArray(self, itm: definitions.Array) -> dict:
         """
         Formats an Array for the given schema type
         :param itm: Array to format
@@ -196,7 +202,7 @@ class JADNtoJSON(base.WriterBase):
             self.formatStr(itm.name): self._cleanEmpty(array_json)
         }
 
-    def _formatArrayOf(self, itm: schema.definitions.ArrayOf) -> dict:
+    def _formatArrayOf(self, itm: definitions.ArrayOf) -> dict:
         """
         Formats ArrayOf for the given schema type
         :param itm: ArrayOf to format
@@ -215,12 +221,12 @@ class JADNtoJSON(base.WriterBase):
         if vtype.startswith("$"):
             val_def = list(filter(lambda d: d.name == vtype[1:], self._types))
             val_def = val_def[0] if len(val_def) == 1 else {}
-            id_val = val_def.opts.get("id", None)
+            id_val = val_def.options.get("id", None)
             enum_val = "id" if id_val else ("value" if val_def.type == "Enumerated" else "name")
 
             arrayof_def["items"] = dict(
                 type="integer" if id_val else "string",
-                enum=[f[enum_val] for f in val_def.fields]
+                enum=[f.get(enum_val) for f in val_def.fields]
             )
         else:
             arrayof_def["items"] = self._getFieldType(vtype)
@@ -229,7 +235,7 @@ class JADNtoJSON(base.WriterBase):
             self.formatStr(itm.name): self._cleanEmpty(arrayof_def)
         }
 
-    def _formatChoice(self, itm: schema.definitions.Choice) -> dict:
+    def _formatChoice(self, itm: definitions.Choice) -> dict:
         """
         Formats choice for the given schema type
         :param itm: choice to format
@@ -248,7 +254,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatEnumerated(self, itm: schema.definitions.Enumerated) -> dict:
+    def _formatEnumerated(self, itm: definitions.Enumerated) -> dict:
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -269,7 +275,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatMap(self, itm: schema.definitions.Map) -> dict:
+    def _formatMap(self, itm: definitions.Map) -> dict:
         """
         Formats map for the given schema type
         :param itm: map to format
@@ -287,7 +293,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatMapOf(self, itm: schema.definitions.MapOf) -> dict:
+    def _formatMapOf(self, itm: definitions.MapOf) -> dict:
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -315,7 +321,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatRecord(self, itm: schema.definitions.Record) -> dict:
+    def _formatRecord(self, itm: definitions.Record) -> dict:
         """
         Formats records for the given schema type
         :param itm: record to format
@@ -333,7 +339,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatCustom(self, itm: schema.definitions.Definition) -> dict:
+    def _formatCustom(self, itm: definitions.Definition) -> dict:
         """
         Formats custom for the given schema type
         :param itm: custom to format
@@ -406,9 +412,17 @@ class JADNtoJSON(base.WriterBase):
                 r_opts[optKeys[key]] = self._validationMap.get(val, val) if key == "format" else val
             else:
                 print(f"unknown option for type of {optType}: {key} - {val}")
+
+        fmt = r_opts.get("format", "")
+        if re.match(r"^u\d+$", fmt):
+            del r_opts["format"]
+            r_opts.update({
+                "minLength" if optType in ("Binary", "String") else "minimum": 0,
+                "maxLength" if optType in ("Binary", "String") else "maximum": pow(2, int(fmt[1:])) - 1
+            })
         return r_opts
 
-    def _getFieldType(self, field: Union[str, schema.fields.EnumeratedField, schema.fields.Field]) -> dict:
+    def _getFieldType(self, field: Union[str, fields.EnumeratedField, fields.Field]) -> dict:
         """
         Determines the field type for the schema
         :param field: current type
@@ -417,7 +431,7 @@ class JADNtoJSON(base.WriterBase):
         field_type = getattr(field, "type", field)
         field_type = field_type if isinstance(field_type, str) else "String"
 
-        if isinstance(field, schema.fields.Field):
+        if isinstance(field, fields.Field):
             rtn = {
                 "MapOf": self._formatMapOf,
                 "ArrayOf": self._formatArrayOf
@@ -451,7 +465,7 @@ class JADNtoJSON(base.WriterBase):
             src, attr = field_type.split(":", 1)
             if src in self._imports:
                 fmt = "" if self._imports[src].endswith(".json") else ".json"
-                return {"$ref": f"{self._imports[src]}{fmt}#/{attr}"}
+                return {"$ref": f"{self._imports[src]}{fmt}#/definitions/{attr}"}
 
         elif re.match(r"^Enum\(.*?\)$", field_type):
             f_type = self._schema.types.get(field_type[5:-1])
@@ -470,7 +484,7 @@ class JADNtoJSON(base.WriterBase):
         print(f"unknown type: {field_type}")
         return {"type": "string"}
 
-    def _makeField(self, field: schema.fields.Field) -> dict:
+    def _makeField(self, field: fields.Field) -> dict:
         if self._is_array(field.options):
             field_def = dict(
                 type="array",

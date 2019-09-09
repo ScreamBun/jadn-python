@@ -6,6 +6,11 @@ import re
 from beautifultable import BeautifulTable
 from datetime import datetime
 
+from jadnschema.schema import (
+    definitions,
+    fields
+)
+
 from typing import (
     Any,
     Dict,
@@ -13,8 +18,6 @@ from typing import (
 )
 
 from ..base import WriterBase
-
-from .... import schema
 
 
 class JADNtoIDL(WriterBase):
@@ -58,7 +61,7 @@ class JADNtoIDL(WriterBase):
         return f"{self._makeTable(meta)}\n\n"
 
     # Structure Formats
-    def _formatArray(self, itm: schema.definitions.Array) -> str:
+    def _formatArray(self, itm: definitions.Array) -> str:
         """
         Formats array for the given schema type
         :param itm: array to format
@@ -97,7 +100,7 @@ class JADNtoIDL(WriterBase):
         array_idl += f"\n{fields}"
         return f"{array_idl}\n}}\n"
 
-    def _formatArrayOf(self, itm: schema.definitions.ArrayOf) -> str:
+    def _formatArrayOf(self, itm: definitions.ArrayOf) -> str:
         """
         Formats arrayOf for the given schema type
         :param itm: arrayOf to format
@@ -105,7 +108,7 @@ class JADNtoIDL(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatChoice(self, itm: schema.definitions.Choice) -> str:
+    def _formatChoice(self, itm: definitions.Choice) -> str:
         """
         Formats choice for the given schema type
         :param itm: choice to format
@@ -124,7 +127,7 @@ class JADNtoIDL(WriterBase):
         choice_idl += f"\n{fields}"
         return f"{choice_idl}\n}}\n"
 
-    def _formatEnumerated(self, itm: schema.definitions.Enumerated) -> str:
+    def _formatEnumerated(self, itm: definitions.Enumerated) -> str:
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -150,7 +153,7 @@ class JADNtoIDL(WriterBase):
         enumerated_idl += f"\n{fields}"
         return f"{enumerated_idl}\n}}\n"
 
-    def _formatMap(self, itm: schema.definitions.Map) -> str:
+    def _formatMap(self, itm: definitions.Map) -> str:
         """
         Formats map for the given schema type
         :param itm: map to format
@@ -174,7 +177,7 @@ class JADNtoIDL(WriterBase):
         map_idl += f"\n{fields}"
         return f"{map_idl}\n}}\n"
 
-    def _formatMapOf(self, itm: schema.definitions.MapOf) -> str:
+    def _formatMapOf(self, itm: definitions.MapOf) -> str:
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -182,7 +185,7 @@ class JADNtoIDL(WriterBase):
         """
         return self._formatCustom(itm)
 
-    def _formatRecord(self, itm: schema.definitions.Record) -> str:
+    def _formatRecord(self, itm: definitions.Record) -> str:
         """
         Formats records for the given schema type
         :param itm: record to format
@@ -206,7 +209,7 @@ class JADNtoIDL(WriterBase):
         record_idl += f"\n{fields}"
         return f"{record_idl}\n}}\n"
 
-    def _formatCustom(self, itm: schema.definitions.Definition) -> str:
+    def _formatCustom(self, itm: definitions.Definition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -230,7 +233,7 @@ class JADNtoIDL(WriterBase):
         return f"{itm.name} = {itmType}{'  // '+itm.description if itm.description else ''}\n"
 
     # Helper Functions
-    def _makeFields(self, fields: List[schema.fields.Field]) -> str:
+    def _makeFields(self, fields: List[fields.Field]) -> str:
         tmp_fields = []
         for idx, field in enumerate(fields):
             field_type = f"{field.type}"
