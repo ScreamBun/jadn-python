@@ -1,24 +1,21 @@
 """
 Base JADN Schema Reader/Writer
 """
+import os
 import re
 
 from functools import partial
-
 from io import (
     BufferedIOBase,
     TextIOBase
 )
-
 from typing import (
     Any,
     Callable,
     Tuple,
     Union
 )
-
 from . import enums
-
 from ... import (
     schema as jadn_schema,
     utils
@@ -59,16 +56,35 @@ class ReaderBase(object):
     """
     format: str = None
 
-    def __init__(self) -> None:
+    def load(self, fname: Union[str, BufferedIOBase, TextIOBase]) -> jadn_schema.Schema:
         """
-        Schema Converter Init
+        Load the schema file as a JADN schema
+        :param fname: file to load schema from
+        :return: JADN Schema
         """
+        schema = ""
+        if isinstance(fname, (BufferedIOBase, TextIOBase)):
+            schema = fname.read()
 
-    def load(self, fname: Union[BufferedIOBase, TextIOBase], *args, **kwargs) -> jadn_schema.Schema:
-        raise NotImplemented(f"{self.__class__.__name__} does not implement `load` as a class function")
+        if isinstance(fname, str):
+            if os.path.isfile(fname):
+                with open(fname, "rb") as f:
+                    schema = f.read()
+            else:
+                raise FileNotFoundError(f"Schema file not found - '{fname}'")
 
-    def loads(self, schema: Union[bytes, bytearray, str], *args, **kwargs) -> jadn_schema.Schema:
-        raise NotImplemented(f"{self.__class__.__name__} does not implement `loads` as a class function")
+        return self.parse(schema)
+
+    def loads(self, schema: Union[bytes, bytearray, str]) -> jadn_schema.Schema:
+        """
+        Loads the schema string to a JADN schema
+        :param schema: schema string to load
+        :return: JADN schema
+        """
+        return self.parse(schema)
+
+    def parse(self, schema: Union[bytes, str]) -> jadn_schema.Schema:
+        raise NotImplemented(f"{self.__class__.__name__} does not implement `parse` as a class function")
 
 
 class WriterBase(object):
@@ -77,7 +93,7 @@ class WriterBase(object):
     """
     format: str = None
 
-    escape_chars: Tuple[str] = (' ', )
+    escape_chars: Tuple[str] = (" ", )
 
     # Non Override
     _definition_order: Tuple[str] = ("OpenC2-Command", "OpenC2-Response", "Action", "Target", "Actuator", "Args",
@@ -87,21 +103,21 @@ class WriterBase(object):
                                      "Properties", "URI", "Action-Targets", "Targets", "Date-Time", "Duration",
                                      "Feature", "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr",
                                      "L4-Protocol", "Message-Type", "Nsid", "Payload", "Port", "Response-Type",
-                                     "Version", "Binary", "Command-ID")
+                                     "Versions", "Version", "Profiles", "Rate-Limit", "Binary", "Command-ID")
 
-    _indent: str = ' ' * 2
+    _indent: str = " " * 2
 
-    _meta_order: Tuple[str] = ('title', 'module', 'patch', 'description', 'exports', 'imports')
+    _meta_order: Tuple[str] = ("title", "module", "patch", "description", "exports", "imports", "config")
 
     _space_start = re.compile(r"^\s+", re.MULTILINE)
 
     _table_field_headers: utils.FrozenDict = utils.FrozenDict({
-        '#': 'options',
-        'Description': 'description',
-        'ID': 'id',
-        'Name': ('name', 'value'),
-        'Type': 'type',
-        'Value': 'value'
+        "#": "options",
+        "Description": "description",
+        "ID": "id",
+        "Name": ("name", "value"),
+        "Type": "type",
+        "Value": "value"
     })
 
     def __init__(self, jadn: Union[dict, str, jadn_schema.Schema], comm: str = enums.CommentLevels.ALL) -> None:
@@ -125,16 +141,16 @@ class WriterBase(object):
         raise NotImplemented(f"{self.__class__.__name__} does not implement `dumps` as a class function")
 
     # Helper Functions
-    def _makeStructures(self, default: Any = None, *args, **kwargs) -> list:
+    def _makeStructures(self, default: Any = None, *args, **kwargs) -> dict:
         """
         Create the type definitions for the schema
         :return: type definitions for the schema
         :rtype list
         """
-        structs = []
+        structs = {}
         for t in self._types:
             df = getattr(self, f"_format{t.type if t.is_structure() else 'Custom'}", None)
-            structs.append(df(t, *args, **kwargs) if df else default)
+            structs[t.name] = df(t, *args, **kwargs) if df else default
 
         return structs
 
@@ -145,8 +161,8 @@ class WriterBase(object):
         :return: formatted string
         """
         escape_chars = list(filter(None, self.escape_chars))
-        if s == '*':
-            return 'unknown'
+        if s == "*":
+            return "unknown"
         elif len(escape_chars) > 0:
             return re.compile(rf"[{''.join(escape_chars)}]").sub('_', s)
         return s
@@ -168,4 +184,4 @@ class WriterBase(object):
         if "ktype" in opts or "vtype" in opts:
             return False
 
-        return opts.get('maxc', 1) != 1
+        return opts.get("maxc", 1) != 1

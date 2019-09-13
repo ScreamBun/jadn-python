@@ -47,7 +47,7 @@ class Definition(BaseModel):
     # TODO: check for optional namespace - NSID:TYPE
     def __init__(self, data: Union[dict, list, "Definition"] = None, **kwargs):
         super(Definition, self).__init__(data, **kwargs)
-        self.options = self.options if hasattr(self, "options") else Options()
+        self.options = getattr(self, "options", Options())
         has_fields = hasattr(self, "fields")
 
         if getattr(self, "name", None) in (t for jt in self._jadn_types.values() for t in jt):
@@ -117,7 +117,9 @@ class Definition(BaseModel):
         :param val: name to validate
         :return: original name or raise error
         """
-        if not re.match(r"^[A-Z][-$A-Za-z0-9]{0,31}$", val):
+        # TODO: Read TypeName regex from schema.meta.config
+        TypeName = self._config.meta.config.TypeName
+        if not re.match(TypeName, val):
             raise ValueError(f"Name invalid - {val}")
         return val
 
@@ -235,15 +237,15 @@ class Definition(BaseModel):
     def process_options(self) -> None:
         if hasattr(self.options, "ktype") and self.options.ktype.startswith("$"):
             ktype = self.options.ktype
-            if ktype not in self._schema._types:
-                type_def = self._schema.types.get(ktype[1:], None)
-                self._schema._types[ktype] = type_def.enumerated()
+            if ktype not in self._config._derived:
+                type_def = self._config.types.get(ktype[1:], None)
+                self._config._derived[ktype] = type_def.enumerated()
 
         if hasattr(self.options, "vtype") and self.options.vtype.startswith("$"):
             vtype = self.options.vtype
-            if vtype not in self._schema._types:
-                type_def = self._schema.types.get(vtype[1:], None)
-                self._schema._types[vtype] = type_def.enumerated()
+            if vtype not in self._config._derived:
+                type_def = self._config.types.get(vtype[1:], None)
+                self._config._derived[vtype] = type_def.enumerated()
 
     def enumerated(self) -> "Definition":
         if self.type in ("Binary", "Boolean", "Integer", "Number", "Null", "String"):
@@ -257,7 +259,7 @@ class Definition(BaseModel):
             type="Enumerated",
             description=f"Derived Enumerated from {self.name}",
             fields=[f.enum_field() for f in self.fields]
-        ))
+        ), _config=self._config)
 
 
 class Array(Definition):
@@ -271,7 +273,7 @@ class Array(Definition):
     def validate(self, inst: Union[list, tuple]) -> Optional[List[Exception]]:
         errors = []
         if "format" in self.options:
-            fun = self._schema._formats.get(self.options.get("format", ""), None)
+            fun = self._config._formats.get(self.options.get("format", ""), None)
             if fun:
                 errors.append(fun(inst))
         else:
@@ -328,7 +330,7 @@ class ArrayOf(Definition):
                 if not all([isinstance(idx, python_type) for idx in inst]):
                     errors.append(ValidationError(f"{self} values are not valid as {vtype}"))
             else:
-                schema_type = self._schema._types.get(vtype) if vtype.startswith("$") else self._schema.types.get(vtype)
+                schema_type = self._config._derived.get(vtype) if vtype.startswith("$") else self._config.types.get(vtype)
                 for idx in inst:
                     errs = schema_type.validate(idx)
                     errors.extend(errs if isinstance(errs, list) else [errs])
@@ -358,7 +360,7 @@ class Choice(Definition):
         attr = "id" if hasattr(self.options, "id") else "name"
 
         if key and key in [getattr(f, attr) for f in self.fields]:
-            type_def = self._schema.types.get(self.get_field(key).type)
+            type_def = self._config.types.get(self.get_field(key).type)
             rtn = type_def.validate(inst[key]) if type_def else ValidationError(f"{self} - invalid value for choice of {key}")
             return rtn if isinstance(rtn, list) else [rtn]
 
@@ -437,10 +439,10 @@ class MapOf(Definition):
         max_keys = 100 if max_keys <= 0 else max_keys
 
         ktype = self.options.ktype
-        key_cls = getattr(self._schema, f"{'_' if ktype.startswith('$') else ''}types").get(ktype, None)
+        key_cls = getattr(self._config, f"{'_' if ktype.startswith('$') else ''}types").get(ktype, None)
 
         vtype = self.options.vtype
-        value_cls = getattr(self._schema, f"{'_' if vtype.startswith('$') else ''}types").get(vtype, None)
+        value_cls = getattr(self._config, f"{'_' if vtype.startswith('$') else ''}types").get(vtype, None)
 
         if min_keys > key_count:
             errors.append(ValidationError(f"{self} - minimum field count not met; min of {min_keys}, given {key_count}"))
@@ -515,9 +517,9 @@ class CustomDefinition(Definition):
         fmt = self.options.get("format", None)
         if fmt:
             if re.match(r"^u\d+$", fmt):
-                fun = partial(self._schema._formats["unsigned"], int(fmt[1:]))
+                fun = partial(self._config._formats["unsigned"], int(fmt[1:]))
             else:
-                fun = self._schema._formats.get(fmt, None)
+                fun = self._config._formats.get(fmt, None)
 
             err = fun(inst) if fun else None
             if err:

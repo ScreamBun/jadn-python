@@ -4,6 +4,7 @@ JADN Schema Models
 import json
 import numbers
 import os
+import re
 
 from io import (
     BufferedIOBase,
@@ -16,6 +17,7 @@ from typing import (
     List,
     Optional,
     Set,
+    Tuple,
     Union
 )
 
@@ -28,50 +30,152 @@ from .exceptions import (
 from .formats import ValidationFormats
 
 
-class Meta(BaseModel):
-    module: str
-    patch: Optional[str]
-    title: Optional[str]
-    description: Optional[str]
-    imports: Optional[List[List[str]]]  # min_size=2, max_size=2
-    exports: Optional[List[str]]
+class Config(BaseModel):
+    MaxBinary: Optional[int]    # Default maximum number of octets
+    MaxString: Optional[int]    # Default maximum number of characters
+    MaxElements: Optional[int]  # Default maximum number of items/properties
+    FS: Optional[str]           # Field Separator character used in pathnames
+    Sys: Optional[str]          # System character for TypeName
+    TypeName: Optional[str]     # TypeName regex
+    FieldName: Optional[str]    # FieldName regex
+    NSID: Optional[str]         # Namespace Identifier regex
+    _defaults: Dict[str, Union[int, str]] = {
+        "MaxBinary": 255,
+        "MaxString": 255,
+        "MaxElements": 100,
+        "FS": "",
+        "Sys": "",
+        "TypeName": "^[A-Z][-$A-Za-z0-9]{0,31}$",
+        "FieldName": "^[a-z][_A-Za-z0-9]{0,31}$",
+        "NSID": "^[A-Za-z][A-Za-z0-9]{0,7}$"
+    }
+    _overrides: Tuple[str, ...]
 
-    __slots__ = ("module", "patch", "title", "description", "imports", "exports")
+    __slots__ = ("MaxBinary", "MaxString", "MaxElements", "FS", "Sys", "TypeName", "FieldName", "NSID")
 
-    def __init__(self, data: Union[dict, "Meta"] = None, **kwargs):
-        super(Meta, self).__init__(data, **kwargs)
+    def __init__(self, data: Union[dict, "Config"] = None, **kwargs):
+        data = {re.sub(r"^\$", "", k): v for k, v in (data.items() if data else {})}
+        self._overrides = tuple(data.keys()) if data else ()
+        super(Config, self).__init__(data, **kwargs)
 
-        if hasattr(self, "imports"):
-            if any(len(imp) != 2 for imp in self.imports):
-                raise ValueError(f"{self.__class__.__name__}.import improperly formatted")
+        for k, v in self._defaults.items():
+            if v and not hasattr(self, k):
+                setattr(self, k, v)
 
     def schema(self):
         """
         Format this meta into valid JADN format
         :return: JADN formatted meta
         """
-        return self.dict()
+        return {f"${k}": v for k, v in self.dict().items() if k in self._overrides}
+
+    # Validation functions
+    def check_MaxBinary(self, val: int) -> int:
+        if val < 1:
+            raise ValueError(f"MaxBinary invalid, must be greater than 1 - {val}")
+        return val
+
+    def check_MaxString(self, val: int) -> int:
+        if val < 1:
+            raise ValueError(f"MaxString invalid, must be greater than 1 - {val}")
+        return val
+
+    def check_MaxElements(self, val: int) -> int:
+        if val < 1:
+            raise ValueError(f"MaxElements invalid, must be greater than 1 - {val}")
+        return val
+
+    def check_FS(self, val: str) -> str:
+        if len(val) != 1:
+            raise ValueError(f"FS invalid, must be 1 character - given {len(val)}")
+        return val
+
+    def check_Sys(self, val: str) -> str:
+        if len(val) != 1:
+            raise ValueError(f"Sys invalid, must be 1 character - given {len(val)}")
+        return val
+
+    def check_TypeName(self, val: str) -> str:
+        if len(val) < 1 or len(val) > 127:
+            raise ValueError(f"TypeName invalid, must be greater 1 and less than 127 characters - given {len(val)}")
+        try:
+            re.compile(val)
+        except Exception as e:
+            raise e
+        return val
+
+    def check_FieldName(self, val: str) -> str:
+        if len(val) < 1 or len(val) > 127:
+            raise ValueError(f"FieldName invalid, must be greater 1 and less than 127 characters - given {len(val)}")
+        try:
+            re.compile(val)
+        except Exception as e:
+            raise e
+        return val
+
+    def check_NSID(self, val: str) -> str:
+        if len(val) < 1 or len(val) > 127:
+            raise ValueError(f"NSID invalid, must be greater 1 and less than 127 characters - given {len(val)}")
+        try:
+            re.compile(val)
+        except Exception as e:
+            raise e
+        return val
+
+
+class Meta(BaseModel):
+    module: str
+    patch: Optional[str]
+    title: Optional[str]
+    description: Optional[str]
+    imports: Optional[Dict[str, str]]
+    exports: Optional[List[str]]
+    config: Optional[Config]
+    _config: bool
+
+    __slots__ = ("module", "patch", "title", "description", "imports", "exports", "config")
+
+    def __init__(self, data: Union[dict, "Meta"] = None, **kwargs):
+        keys = data.keys() if data else ()
+        self._config = "config" in keys
+
+        super(Meta, self).__init__(data, **kwargs)
+
+    def schema(self):
+        """
+        Format this meta into valid JADN format
+        :return: JADN formatted meta
+        """
+        d = self.dict()
+        print(d)
+        if self._config:
+            if "config" in d:
+                d["config"] = self.config.dict()
+        elif "config" in d:
+            del d["config"]
+        return d
 
 
 class Schema(BaseModel):
     meta: Meta
     types: Dict[str, Definition]
-    _formats = Dict[str, Callable]
-    _types: Dict[str, Definition]
+
+    # Helper vars
+    _derived: Dict[str, Definition]
+    _formats: Dict[str, Callable]
+    _schema_types: Set[str]
 
     __slots__ = ("meta", "types")
 
     def __init__(self, schema: Union[dict, "Schema"] = None, **kwargs):
-        kwargs["_schema"] = self
-        super(Schema, self).__init__(schema, **kwargs)
+        self.types = {}
+        self.meta = Meta()
+        self._derived = {}
         self._formats = ValidationFormats
-        self._types = {}
+        super(Schema, self).__init__({}, _config=self)
 
         if schema:
-            for type_name, type_def in tuple(self.types.items()):
-                type_def.process_options()
-                self._schema_types.update(type_def.fieldtypes)
-            self.verify_schema()
+            self._setSchema(schema)
 
     @property
     def schema_types(self):
@@ -92,12 +196,12 @@ class Schema(BaseModel):
         """
         type_deps = self.dependencies()
         refs = {dep for tn, td in type_deps.items() for dep in td}.union({*self.meta.get("exports", [])})
-        types = {*type_deps.keys()}.union(self._types.keys())
+        types = {*type_deps.keys()}.union(self._derived.keys())
 
         return dict(
             module=f"{self.meta.get('module', '')}{self.meta.get('patch', '')}",
             exports=self.meta.get('exports', []),
-            unreferenced=list(types.difference(refs).difference(self._types.keys())),
+            unreferenced=list(types.difference(refs).difference(self._derived.keys())),
             undefined=list(refs.difference(types))
         )
 
@@ -106,7 +210,7 @@ class Schema(BaseModel):
         Determine the dependencies for each type within the schema
         :return: dictionary of dependencies
         """
-        nsids = [n[0] for n in self.meta.get("imports", [])]
+        nsids = [n for n in self.meta.get("imports", {}).keys()]
         type_deps = {imp: set() for imp in nsids}
 
         def ns(name: str) -> str:
@@ -268,12 +372,14 @@ class Schema(BaseModel):
         """
         if not isinstance(data, (dict, type(self))):
             raise TypeError("Cannot load schema, incorrect type")
-        kwargs = {"_schema": self}
-        super(Schema, self).__init__(data, **kwargs)
+
+        self.meta = Meta(data.get("meta", {}))
+        super(Schema, self).__init__(data, _config=self)
 
         for type_name, type_def in tuple(self.types.items()):
             type_def.process_options()
             self._schema_types.update(type_def.fieldtypes)
+
         self.verify_schema()
 
     def _dumps(self, schema: Union[dict, float, int, str, tuple], indent: int = 2, _level: int = 0) -> str:

@@ -25,7 +25,7 @@
     [2, "target", "Target", [], "The object of the Action. The Action is performed on the Target."],
     [3, "args", "Args", ["[0"], "Additional information that applies to the Command."],
     [4, "actuator", "Actuator", ["[0"], "The subject of the Action. The Actuator executes the Action on the Target."],
-    [5, "command_id", "String", ["[0"], "An identifier of this Command."]
+    [5, "command_id", "Command-ID", ["[0"], "An identifier of this Command."]
   ]],
 
   ["OpenC2-Response", "Record", [], "", [
@@ -59,7 +59,7 @@
 
   ["Target", "Choice", [], "", [
     [1, "artifact", "Artifact", [], "An array of bytes representing a file-like object or a link to that object."],
-    [2, "command", "String", [], "A reference to a previously issued Command."],
+    [2, "command", "Command-ID", [], "A reference to a previously issued Command."],
     [3, "device", "Device", [], "The properties of a hardware device."],
     [7, "domain_name", "Domain-Name", [], "A network domain name."],
     [8, "email_addr", "Email-Addr", [], "A single email address."],
@@ -117,10 +117,10 @@
   ]],
 
   ["Results", "Map", ["{1"], "Response Results", [
-    [1, "versions", "Version", ["[0", "]10", "q"], "List of OpenC2 language versions supported by this Actuator"],
-    [2, "profiles", "Namespace", ["[0", "]0", "q"], "List of profiles supported by this Actuator"],
+    [1, "versions", "Versions", ["[0"], "List of OpenC2 language versions supported by this Actuator"],
+    [2, "profiles", "Profiles", ["[0"], "List of profiles supported by this Actuator"],
     [3, "pairs", "Action-Targets", ["[0"], "List of targets applicable to each supported Action"],
-    [4, "rate_limit", "Number", ["{0", "[0"], "Maximum number of requests per minute supported by design or policy"],
+    [4, "rate_limit", "Rate-Limit", ["[0"], "Maximum number of requests per minute supported by design or policy"],
     [1024, "slpf", "pf:P-Results", ["[0"], "**Example**: Results defined in the Stateless Packet Filtering Profile"],
     [2132, "x-acme", "ac:P-Results", ["[0"], "**Example**: Results defined in the Acme custom profile"],
     [2145, "x-esm", "esm:P-Results", ["[0"], "**Example**: Results defined in the Energy Storage Module custom profile"],
@@ -129,7 +129,7 @@
   ]],
 
   ["Artifact", "Record", ["{1"], "", [
-    [1, "mime_type", "String", ["[0"], "Permitted values specified in the IANA Media Types registry, [RFC6838]"],
+    [1, "mime_type", "String", ["[0", "%^\\w+\\/[-+.\\w]+$"], "Permitted values specified in the IANA Media Types registry, [RFC6838]"],
     [2, "payload", "Payload", ["[0"], "Choice of literal content or URL"],
     [3, "hashes", "Hashes", ["[0"], "Hashes of the payload content"]
   ]],
@@ -201,7 +201,7 @@
 
   ["Action-Targets", "MapOf", ["{1", "+Action", "*Targets"], "Map of each action supported by this actuator to the list of targets applicable to that action"],
 
-  ["Targets", "ArrayOf", ["*Enum(Target)", "{1", "}0", "q"], "List of Target fields"],
+  ["Targets", "ArrayOf", ["*$Target", "{1", "}0", "q"], "List of Target fields"],
 
   ["Date-Time", "Integer", ["{0"], "Date and Time"],
 
@@ -249,9 +249,11 @@
     [3, "complete", "Respond when all aspects of Command completed"]
   ]],
 
-  ["Version", "String", [], "Major.Minor version number"],
+  ["Version", "String", ["%^\\d{1,2}\\.\\d{1,4}$"], "Major.Minor version number"],
 
-  ["Namespace", "String", ["/uri"], "Unique name of an Actuator Profile"]
-
+  ["Versions", "ArrayOf", ["*Version", "}5", "q"], "List of supported language spec versions"],
+  ["Profiles", "ArrayOf", ["*URI", "}10", "q"], "List of actuator profiles supported by this Consumer"],
+  ["Rate-Limit", "Number", ["{0"], "Maximum number of requests per minute supported by design or policy"],
+  ["Command-ID", "String", ["{1", "}32"], "Command Identifier"]
  ]
 }

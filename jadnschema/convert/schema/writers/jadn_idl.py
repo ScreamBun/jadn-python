@@ -1,6 +1,7 @@
 """
 JADN to JADN IDL
 """
+import json
 import re
 
 from beautifultable import BeautifulTable
@@ -48,16 +49,28 @@ class JADNtoIDL(WriterBase):
         :param comm: Level of comments to include in converted schema, ignored
         :return: JSON schema
         """
-        jidl_schema = self.makeHeader() + "\n".join(self._makeStructures(default=""))
-        jidl_schema = "\n".join(l.rstrip() for l in re.sub(r"\t", " "*4, jidl_schema).split("\n"))
-        return jidl_schema
+        schema_jidl = self.makeHeader()
+        structures = self._makeStructures(default="")
+        for name in self._definition_order:
+            str_def = structures.pop(name, "")
+            schema_jidl += f"{str_def}\n" if str_def else ""
+
+        # schema_jidl = "\n".join(l.rstrip() for l in re.sub(r"\t", " "*4, schema_jidl).split("\n"))
+        return schema_jidl.replace("\t", " "*4)
 
     def makeHeader(self) -> str:
         """
         Create the headers for the schema
         :return: header for schema
         """
-        meta = [[f"{meta_key}:", self._meta.get(meta_key, '')] for meta_key in self._meta_order]
+        def val(v):
+            if hasattr(v, "schema"):
+                return json.dumps(v.schema())
+            elif not isinstance(v, (str, int, float)):
+                return json.dumps(v)
+            return v
+
+        meta = [[f"{meta_key}:", val(self._meta.get(meta_key, ''))] for meta_key in self._meta_order]
         return f"{self._makeTable(meta)}\n\n"
 
     # Structure Formats
@@ -82,6 +95,7 @@ class JADNtoIDL(WriterBase):
             fmt = f" /{field.options.format}" if hasattr(field.options, "format") else ""
             opt = " optional" if self._is_optional(field.options) else ""
             cont = ',' if idx + 1 != len(itm.fields) else ''
+            field.description = field.description[:-1] if field.description.endswith(".") else field.description
 
             fields.append([
                 field.id,
@@ -137,6 +151,7 @@ class JADNtoIDL(WriterBase):
         enumerated_idl = f"{itm.name} = Enumerated{'.ID' if enum_id else ''} {{"
         fields = []
         for i, f in enumerate(itm.fields):
+            f.description = f.description[:-1] if f.description.endswith(".") else f.description
             if enum_id:
                 fields.append([f.id, f"// {f.value}:: {f.description}"])
             else:
@@ -229,6 +244,8 @@ class JADNtoIDL(WriterBase):
 
         itmType += f"(%{itm.options.pattern}%)" if hasattr(itm.options, "pattern") else ""
         itmType += f" /{itm.options.format}" if hasattr(itm.options, "format") else ""
+        itmType += f" unique" if getattr(itm.options, "unique", False) else ""
+        itm.description = itm.description[:-1] if itm.description.endswith(".") else itm.description
 
         return f"{itm.name} = {itmType}{'  // '+itm.description if itm.description else ''}\n"
 
@@ -253,18 +270,20 @@ class JADNtoIDL(WriterBase):
             fmt = f" /{field.options.format}" if hasattr(field.options, "format") else ""
             pattern = f"(%{field.options.pattern}%)" if hasattr(field.options, "pattern") else ""
             opt = " optional" if self._is_optional(field.options) else ""
+            unq = " unique" if getattr(field.options, "unique", False) else ""
             cont = ',' if idx + 1 != len(fields) else ''
+            field.description = field.description[:-1] if field.description.endswith(".") else field.description
 
             tmp_fields.append([
                 field.id,
                 field.name,
-                f"{field_type}{fmt}{pattern}{opt}{cont}",
+                f"{field_type}{fmt}{pattern}{unq}{opt}{cont}",
                 f"// {field.description}" if field.description else ""
             ])
         return "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(tmp_fields)).split("\n"))
 
     def _makeTable(self, rows: List[List[Any]], alignment: list = None) -> str:
-        table = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
+        table = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=300)
         table.set_style(BeautifulTable.STYLE_NONE)
 
         for row in rows:
@@ -280,4 +299,6 @@ class JADNtoIDL(WriterBase):
         for column in range(table.column_count):
             table.column_alignments[column] = alignment[column]
 
-        return str(table)
+        table_rows = str(table).split("\n")
+        table_rows = list(map(str.rstrip, table_rows))
+        return "\n".join(table_rows)

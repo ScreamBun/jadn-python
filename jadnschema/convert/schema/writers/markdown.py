@@ -1,6 +1,8 @@
 """
 JADN to Markdown tables
 """
+import json
+
 from beautifultable import BeautifulTable
 from datetime import datetime
 from typing import (
@@ -48,7 +50,17 @@ class JADNtoMD(WriterBase):
         :param comm: Level of comments to include in converted schema, ignored
         :return: formatted MarkDown tables of the given Schema
         """
-        return self.makeHeader() + "\n".join(self._makeStructures(default=""))
+        schema_md = self.makeHeader()
+        structures = self._makeStructures(default="")
+        for name in self._definition_order:
+            str_def = structures.pop(name, "")
+            schema_md += f"{str_def}\n" if str_def else ""
+
+        for name in tuple(structures):
+            str_def = structures.pop(name, "")
+            schema_md += f"{str_def}\n" if str_def else ""
+
+        return schema_md.replace("\t", " "*4)
 
     def makeHeader(self) -> str:
         """
@@ -56,8 +68,11 @@ class JADNtoMD(WriterBase):
         :return: header for schema
         """
         def mkrow(k, v):
-            if isinstance(v, (list, tuple)):
-                v = ", ".join([f"**{i[0]}** {i[1]}" for i in v] if isinstance(v[0], (list, tuple)) else v)
+            if isinstance(v, dict) or hasattr(v, "schema"):
+                v = v.schema() if hasattr(v, "schema") else v
+                v = " ".join([f"**{k1}**: {v1}" for k1, v1 in v.items()])
+            elif isinstance(v, (list, tuple)):
+                v = ", ".join(v)
             return {".": f"**{k}:**", "..": v}
 
         headers = {
@@ -84,7 +99,10 @@ class JADNtoMD(WriterBase):
             '#': {'align': '>'},
             'Description': {}
         }
-        rows = [{"id": f.id, "type": f.type, "options": f.options, "description": f"**{f.name}** - {f.description}"} for f in itm.fields]
+        rows = []
+        for f in itm.fields:
+            desc = f.description[:-1] if f.description.endswith(".") else f.description
+            rows.append({"id": f.id, "type": f.type, "options": f.options, "description": f"**{f.name}**::{desc}"})
 
         array_md += self._makeTable(headers, rows)
         return array_md
@@ -124,19 +142,24 @@ class JADNtoMD(WriterBase):
         """
         fmt = ".ID" if hasattr(itm.options, "id") else ""
         enumerated_md = f"**_Type: {itm.name} (Enumerated{fmt})_**\n\n"
+        fields = []
+        for f in itm.fields:
+            f.description = f.description[:-1] if f.description.endswith(".") else f.description
+            fields.append(f)
+
         if hasattr(itm.options, "id"):
             headers = {
                 'ID': {'align': '>'},
                 'Description': {}
             }
-            rows = [{"ID": f.id, "Description": f"**{f.value}** - {f.description}"} for f in itm.fields]
+            rows = [{"ID": f.id, "Description": f"**{f.value}**::{f.description}"} for f in fields]
         else:
             headers = {
                 'ID': {'align': '>'},
                 'Name': {},
                 'Description': {}
             }
-            rows = itm.fields
+            rows = fields
         enumerated_md += self._makeTable(headers, rows)
         return enumerated_md
 
@@ -217,6 +240,26 @@ class JADNtoMD(WriterBase):
         return custom_md
 
     # Helper Functions
+    def _makeField(self, field: Union[definitions.Definition, fields.Field]) -> Dict:
+        field_dict = field.dict()
+        if field.type == "MapOf":
+            field_dict['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
+        elif field.type == "ArrayOf":
+            field_dict['type'] += f"({field.options.get('vtype', 'String')})"
+
+        opts = {} if field.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
+        multi = field.options.multiplicity(**opts)
+        if multi:
+            field_dict['type'] += f"{{{multi}}}"
+
+        field_dict['type'] += f"(%{field.options.pattern}%)" if hasattr(field.options, "pattern") else ""
+        field_dict['type'] += f" /{field.options.format}" if hasattr(field.options, "format") else ""
+        field_dict['type'] += " unique" if getattr(field.options, "unique", False) else ""
+        if field_dict["description"].endswith("."):
+            field_dict["description"] = field_dict["description"][:-1]
+
+        return field_dict
+
     def _makeTable(self, headers: dict, rows: list) -> str:
         """
         Create a table using the given header and row values
@@ -226,7 +269,7 @@ class JADNtoMD(WriterBase):
         """
         table_md = ""
         if rows:
-            table_md = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=250)
+            table_md = BeautifulTable(default_alignment=BeautifulTable.ALIGN_LEFT, max_width=300)
             table_md.set_style(BeautifulTable.STYLE_MARKDOWN)
             table_md.column_headers = list(headers.keys())
 
@@ -249,6 +292,7 @@ class JADNtoMD(WriterBase):
                     elif column == ("name", "value"):
                         cell = f"**{cell}**"
                     tmp_row.append(cell)
+                tmp_row = [str(c).replace("|", "\\|") for c in tmp_row]
                 table_md.append_row(tmp_row)
 
             table_rows = str(table_md).split("\n")
@@ -257,22 +301,3 @@ class JADNtoMD(WriterBase):
             table_rows[1] = f"|{'|'.join(alignment)}|"
             table_md = '\n'.join(table_rows)
         return f"{table_md}\n"
-
-    def _makeField(self, field: Union[definitions.Definition, fields.Field]) -> Dict:
-        field_dict = field.dict()
-        if field.type == "MapOf":
-            field_dict['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
-        elif field.type == "ArrayOf":
-            field_dict['type'] += f"({field.options.get('vtype', 'String')})"
-
-        opts = {} if field.type in ("Integer", "Number") else {"check": lambda x, y: x > 0 or y > 0}
-        multi = field.options.multiplicity(**opts)
-        if multi:
-            field_dict['type'] += f"{{{multi}}}"
-
-        if hasattr(field.options, "pattern"):
-            field_dict['type'] += f"(%{field.options.pattern}%)"
-
-        if hasattr(field.options, "format"):
-            field_dict['type'] += f" /{field.options.format}"
-        return field_dict

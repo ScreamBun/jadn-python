@@ -82,8 +82,10 @@ class Field(base.BaseModel):
         :param val: name to validate
         :return: original name or raise error
         """
-        if not re.match(r"^[a-z][_A-Za-z0-9]{0,31}$", val):
-            raise ValueError("Name invalid - {val}")
+        # TODO: Read FieldName regex from schema.meta.config
+        FieldName = self._config.meta.config.FieldName
+        if not re.match(FieldName, val):
+            raise ValueError(f"Name invalid - {val}")
         return val
 
     def schema(self) -> list:
@@ -124,14 +126,14 @@ class Field(base.BaseModel):
                 errors.append(exceptions.ValidationError(f"field is required, {self}"))
 
         if self.type in ("Binary", "Boolean", "Integer", "Number", "Null", "String"):
-            if f"_{self.name}" not in self._schema.types:
+            if f"_{self.name}" not in self._config.types:
                 tmp_def = self.dict()
                 del tmp_def["id"]
                 tmp_def["name"] = tmp_def["name"].replace("_", "-").capitalize()
-                self._schema.types[f"_{self.name}"] = definitions.CustomDefinition(tmp_def)
-            type_def = self._schema.types.get(f"_{self.name}")
+                self._config.types[f"_{self.name}"] = definitions.CustomDefinition(tmp_def, _config=self._config)
+            type_def = self._config.types.get(f"_{self.name}")
         else:
-            type_def = self._schema.types.get(self.type)
+            type_def = self._config.types.get(self.type)
 
         errs = type_def.validate(inst) if type_def else exceptions.ValidationError(f"invalid type for field, {self}")
         errors.extend(errs if isinstance(errs, list) else [errs])

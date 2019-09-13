@@ -1,8 +1,9 @@
 """
 JADN Base Model
 """
-from typeguard import check_type
+import re
 
+from typeguard import check_type
 from typing import (
     Any,
     Dict,
@@ -16,12 +17,28 @@ from typing import (
 
 ModelData = Union[dict, list, "BaseModel"]
 
+'''
+class MetaModel(ABCMeta):
+    def __new__(mcs, name, bases, namespace):
+        fields: Dict[str, ModelData] = {}
+        validators: Dict[str, Callable] = {}
+
+        new_namespace = {
+            '__config__': None,
+            '__fields__': fields,
+
+            **{n: v for n, v in namespace.items() if n not in fields}
+        }
+        print(f"namespace - {new_namespace.keys()}")
+        return super().__new__(mcs, name, bases, new_namespace)
+'''
+
 
 class BaseModel(object):
     _iter_idx: int
 
     # Helper Variables
-    _schema: "Schema"
+    _config: "Schema"
     _jadn_types: Dict[str, Tuple[str]] = {
         "Simple": (
             "Binary",       # A sequence of octets. Length is the number of octets
@@ -43,21 +60,18 @@ class BaseModel(object):
             "Record"        # An ordered map from a list of keys with positions to values with positionally-defined semantics. Each key has a position and name, and is mapped to a type. Represents a row in a spreadsheet or database table
         )
     }
-
     _schema_types: Set[str] = {t for jt in _jadn_types.values() for t in jt}
 
     def __init__(self, data: ModelData, **kwargs):
-        schema = kwargs.pop("_schema", None)
         if data:
-            values, errs = init_model(self, data, schema)
+            values, errs = init_model(self, data, **kwargs)
             if errs:
                 raise errs[0]
         else:
             values = {}
 
-        kw_vals = {k: v for k, v in kwargs.items() if k in self.__slots__}
-        values.update(kw_vals)
-        values, errs = init_model(self, values, schema)
+        values.update({k: v for k, v in kwargs.items() if k in self.__slots__})
+        values, errs = init_model(self, values, **kwargs)
 
         for k, v in values.items():
             setattr(self, k, v)
@@ -121,7 +135,7 @@ class BaseModel(object):
     # Helper functions
 
 
-def init_model(model: BaseModel, input_data: ModelData, _schema: "Schema" = None, silent: bool = True) -> Tuple[dict, Optional[List[Exception]]]:
+def init_model(model: BaseModel, input_data: ModelData, silent: bool = True, **kwargs) -> Tuple[dict, Optional[List[Exception]]]:
     """
     Validate data against a model
     :param model: model class the data is being validated against
@@ -132,11 +146,8 @@ def init_model(model: BaseModel, input_data: ModelData, _schema: "Schema" = None
     model_class = model.__class__.__name__
     input_data = dict(zip(model.__slots__, input_data)) if isinstance(input_data, list) else input_data
     basetype = input_data.get("type")
-    fields = {}
+    fields = {k: v for k, v in kwargs.items() if re.match(r"^_[^_]", k)}
     errors = []
-
-    if _schema:
-        fields["_schema"] = _schema
 
     if model_class == "Schema":
         if "meta" in input_data and isinstance(input_data.get("meta"), dict):
@@ -145,7 +156,12 @@ def init_model(model: BaseModel, input_data: ModelData, _schema: "Schema" = None
 
         if "types" in input_data and isinstance(input_data.get("types"), list):
             from .definitions import make_definition
-            input_data["types"] = {t[0]: make_definition(t, _schema=_schema) for t in input_data.get("types", [])}
+            input_data["types"] = {t[0]: make_definition(t, **kwargs) for t in input_data.get("types", [])}
+
+    elif model_class == "Meta":
+        if "config" in input_data and isinstance(input_data.get("config"), dict):
+            from .schema import Config
+            input_data["config"] = Config(input_data["config"])
 
     else:
         if "options" in input_data and isinstance(input_data.get("options"), list):
@@ -161,13 +177,13 @@ def init_model(model: BaseModel, input_data: ModelData, _schema: "Schema" = None
         if "fields" in input_data and isinstance(input_data.get("fields"), list):
             from .fields import EnumeratedField, Field
             field = EnumeratedField if basetype == "Enumerated" else Field
-            input_data["fields"] = [field(f, _schema=_schema) for f in input_data["fields"]]
+            input_data["fields"] = [field(f, **kwargs) for f in input_data["fields"]]
 
     for var, val in input_data.items():
         inst = model.__annotations__.get(var)
         try:
             if var not in model.__slots__:
-                raise KeyError(f"{model_class} has extra keys")
+                raise KeyError(f"{model_class} has extra keys - {var}")
             check_type(var, val, inst)
         except Exception as e:
             if silent:

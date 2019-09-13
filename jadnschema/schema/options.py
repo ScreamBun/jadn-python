@@ -78,7 +78,7 @@ class Options(base.BaseModel):
         "{": "minv",        # Minimum numeric value, octet or character count, or element count
         "}": "maxv",        # Maximum numeric value, octet or character count, or element count
         "%": "pattern",     # Regular expression used to validate a String type
-        "U": "unique",      # If present, an ArrayOf instance must not contain duplicate values
+        "q": "unique",      # If present, an ArrayOf instance must not contain duplicate values
         # Field Structural
         "!": "default",     # Reserved for default value Section 3.2.2.4
         "<": "path",     # Use FieldName as a qualifier for fields in FieldType
