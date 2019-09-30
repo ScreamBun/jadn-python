@@ -81,7 +81,7 @@ class BaseModel(object):
             if hasattr(self, f"check_{key}"):
                 val = getattr(self, f"check_{key}")(val)
             check_type(key, val, self.__annotations__.get(key, Any))
-            super(BaseModel, self).__setattr__(key, val)
+            super.__setattr__(self, key, val)
         else:
             raise AttributeError(f"{self.__class__.__name__}.{key} is not a valid attribute that can be set by a user")
 

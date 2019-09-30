@@ -40,6 +40,7 @@ class Options(base.BaseModel):
     maxc: int
     tfield: str  # Enumerated
 
+    # Helper Vars
     _options: Dict[str, List[str]] = {
         "field": (
             "default",
@@ -62,12 +63,14 @@ class Options(base.BaseModel):
             "unique"
         )
     }
-
-    # _fieldOpts: Tuple[str] = ("minc", "maxc", "tfield", "path", "default")
-
     _boolOpts: Tuple[str] = ("id", "path", "unique")
-
     _ids: Dict[str, str] = {
+        # Field Structural
+        "!": "default",     # Reserved for default value Section 3.2.2.4
+        "<": "path",        # Use FieldName as a qualifier for fields in FieldType
+        "[": "minc",        # Minimum cardinality
+        "]": "maxc",        # Maximum cardinality
+        "&": "tfield",      # Field that specifies the type of this field, value is Enumerated
         # Type Structural
         "$": "enum",        # Enumerated type derived from the specified Array, Choice, Map or Record type
         "=": "id",          # If present, Enumerated values and fields of compound types are denoted by FieldID rather than FieldName
@@ -79,14 +82,7 @@ class Options(base.BaseModel):
         "}": "maxv",        # Maximum numeric value, octet or character count, or element count
         "%": "pattern",     # Regular expression used to validate a String type
         "q": "unique",      # If present, an ArrayOf instance must not contain duplicate values
-        # Field Structural
-        "!": "default",     # Reserved for default value Section 3.2.2.4
-        "<": "path",     # Use FieldName as a qualifier for fields in FieldType
-        "[": "minc",        # Minimum cardinality
-        "]": "maxc",        # Maximum cardinality
-        "&": "tfield",      # Field that specifies the type of this field, value is Enumerated
     }
-
     _validFormats: List[str] = [
         # JSON Formats
         "date-time",                # RFC 3339 Section 5.6
@@ -123,7 +119,6 @@ class Options(base.BaseModel):
         "ipv4-net",                 # Array - JSON string containing the text representation of an IPv4 address range as specified in RFC 4632 Section 3.1.
         "ipv6-net"                  # Array - JSON string containing the text representation of an IPv6 address range as specified in RFC 4291 Section 2.3.'
     ]
-
     _validOptions: Dict[str, Tuple[str]] = {
         # Primitives
         "Binary": ("format", "minv", "maxv"),
@@ -158,6 +153,12 @@ class Options(base.BaseModel):
 
         super(Options, self).__init__(data, **kwargs)
 
+    def __setattr__(self, key, val):
+        if key in ("ktype", "vtype") and val:
+            enum = re.match(r"^[eE]num\((?P<type>[^)]*)\)$", val)
+            val = f"${enum.groupdict()['type']}" if enum else val
+        super.__setattr__(self, key, val)
+
     def schema(self,  basetype: str, defname: str = None, field: bool = False) -> list:
         """
         Format the options into valid JADN format
@@ -191,10 +192,12 @@ class Options(base.BaseModel):
 
         if len(keys) > 0:
             errors.append(exceptions.OptionError(f"Extra options given for {loc} - {', '.join(keys)}"))
+
         elif basetype == "ArrayOf":
             keys = {"vtype"} - {*opts.keys()}
             if len(keys) != 0:
                 errors.append(exceptions.OptionError(f"ArrayOf {loc} requires options: vtype"))
+
         elif basetype == "MapOf":
             keys = {"vtype", "ktype"} - {*opts.keys()}
             if len(keys) != 0:
@@ -204,7 +207,7 @@ class Options(base.BaseModel):
         minimum = getattr(self, values[0], 1)
         maximum = getattr(self, values[1], max(1, minimum))
 
-        if maximum != 0 and maximum < minimum:
+        if maximum and maximum != 0 and maximum < minimum:
             errors.append(exceptions.OptionError(f"{values[1]} cannot be less than {values[0]}"))
 
         fmt = opts.get("format")
@@ -243,6 +246,11 @@ class Options(base.BaseModel):
                 return "1"
             return f"{minimum}..{'*' if maximum == 0 else maximum}"
         return ""
+
+    def split(self) -> Tuple["Options", "Options"]:
+        field_opts = Options({f: getattr(self, f) for f in self._options["field"] if hasattr(self, f)})
+        type_opts = Options({f: getattr(self, f) for f in self._options["type"] if hasattr(self, f)})
+        return field_opts, type_opts
 
 
 # Helper Functions

@@ -1,6 +1,8 @@
 """
 JADN Schema Models
 """
+import copy
+import inflect
 import json
 import numbers
 import os
@@ -28,6 +30,7 @@ from .exceptions import (
     ValidationError
 )
 from .formats import ValidationFormats
+from .options import Options
 
 
 class Config(BaseModel):
@@ -39,12 +42,14 @@ class Config(BaseModel):
     TypeName: Optional[str]     # TypeName regex
     FieldName: Optional[str]    # FieldName regex
     NSID: Optional[str]         # Namespace Identifier regex
+
+    # Helper Vars
     _defaults: Dict[str, Union[int, str]] = {
         "MaxBinary": 255,
         "MaxString": 255,
         "MaxElements": 100,
-        "FS": "",
-        "Sys": "",
+        "FS": "/",
+        "Sys": "$",
         "TypeName": "^[A-Z][-$A-Za-z0-9]{0,31}$",
         "FieldName": "^[a-z][_A-Za-z0-9]{0,31}$",
         "NSID": "^[A-Za-z][A-Za-z0-9]{0,7}$"
@@ -131,6 +136,8 @@ class Meta(BaseModel):
     imports: Optional[Dict[str, str]]
     exports: Optional[List[str]]
     config: Optional[Config]
+
+    # Helper Vars
     _config: bool
 
     __slots__ = ("module", "patch", "title", "description", "imports", "exports", "config")
@@ -138,6 +145,8 @@ class Meta(BaseModel):
     def __init__(self, data: Union[dict, "Meta"] = None, **kwargs):
         keys = data.keys() if data else ()
         self._config = "config" in keys
+        if not self._config:
+            self.config = Config()
 
         super(Meta, self).__init__(data, **kwargs)
 
@@ -147,10 +156,9 @@ class Meta(BaseModel):
         :return: JADN formatted meta
         """
         d = self.dict()
-        print(d)
         if self._config:
             if "config" in d:
-                d["config"] = self.config.dict()
+                d["config"] = self.config.schema()
         elif "config" in d:
             del d["config"]
         return d
@@ -163,6 +171,13 @@ class Schema(BaseModel):
     # Helper vars
     _derived: Dict[str, Definition]
     _formats: Dict[str, Callable]
+    _definition_order: Tuple[str] = ("OpenC2-Command", "OpenC2-Response", "Action", "Target", "Actuator", "Args",
+                                     "Status-Code", "Results", "Artifact", "Device", "Domain-Name", "Email-Addr",
+                                     "Features", "File", "IDN-Domain-Name", "IDN-Email-Addr", "IPv4-Net",
+                                     "IPv4-Connection", "IPv6-Net", "IPv6-Connection", "IRI", "MAC-Addr", "Process",
+                                     "Properties", "URI", "Action-Targets", "Date-Time", "Duration", "Feature",
+                                     "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr", "L4-Protocol",
+                                     "Message-Type", "Nsid", "Payload", "Port", "Response-Type", "Version")
     _schema_types: Set[str]
 
     __slots__ = ("meta", "types")
@@ -231,10 +246,16 @@ class Schema(BaseModel):
         :param strip: strip comments from schema
         :return: JADN formatted schema
         """
-        # schema_types = [v for k, v in self.types.items() if not k.startswith("_")]
+        schema_def = lambda d: getattr(d, f"schema{'_strip' if strip else ''}")()
+
+        schema_types = [
+            *[schema_def(self.types[dn]) if dn in self.types else None for dn in self._definition_order],
+            *[None if dn in self._definition_order else schema_def(do) for dn, do in self.types.items()]
+        ]
+
         return dict(
             meta=self.meta.schema(),
-            types=[getattr(t, f"schema{'_strip' if strip else ''}")() for t in self.types.values()]
+            types=list(filter(None, schema_types))
         )
 
     def schema_pretty(self, strip: bool = False, indent: int = 2) -> str:
@@ -245,6 +266,136 @@ class Schema(BaseModel):
         :return: JADN formatted schema
         """
         return self._dumps(self.schema(strip=strip), indent)
+
+    def simplify(self, schema: Union[dict, "Schema"] = None, anon: bool = True, multi: bool = True, derived: bool = True, map_of: bool = True, simple: bool = True) -> Union[dict, "Schema"]:
+        """
+        Given a schema, return a simplified schema with schema extensions removed
+        :param schema: JADN schema to simplify
+        :param anon: Replace all anonymous type definitions with explicit
+        :param multi: Replace all multiple-value fields with explicit ArrayOf type definitions
+        :param derived: Replace all derived enumerations with explicit Enumerated type definitions
+        :param map_of: Replace all MapOf types with listed keys with explicit Map type definitions
+        :param simple: return a simple type (dict) instead of an object (Schema)
+        :return: simplified schema
+        """
+        config = self.meta.config
+        p = inflect.engine()
+
+        def remove_anonymous_type(schema: dict) -> dict:
+            for type_def in list(schema.get("types", [])):
+                for field_def in type_def.get("fields", []):
+                    if "options" in field_def:
+                        field_opts, type_opts = field_def["options"].split()
+                        if type_opts.dict():
+                            new_name = f"{field_def['type']}{config.Sys}{field_def['name']}".replace("_", "-")
+                            schema["types"].append({
+                                "name": new_name,
+                                "type": field_def["type"],
+                                "options": type_opts,
+                                "description": field_def["description"]
+                            })
+                            field_def.update(
+                                type=new_name,
+                                options=field_opts
+                            )
+
+            return schema
+
+        def remove_multiplicity(schema: dict) -> dict:
+            for type_def in schema.get("types", []):
+                for field_def in type_def.get("fields", []):
+                    if "options" in field_def:
+                        field_opts, type_opts = field_def["options"].split()
+                        minc = field_opts.get("minc", 0)
+                        maxc = field_opts.get("maxc", None)
+                        if (maxc is not None and maxc != 1) or (minc is not None and minc > 1):
+                            delattr(field_opts, "maxc")
+
+                            type_opts.vtype = field_def["type"]
+                            type_opts.minv = max(minc, 1)
+                            if maxc is not None and maxc > 1:
+                                type_opts.maxv = maxc
+
+                            new_name = field_def['name'].split("_")
+                            new_name[-1] = p.plural(new_name[-1]) if p.get_count(new_name[-1]) == 1 else new_name[-1]
+                            new_name = "-".join(map(str.capitalize, new_name))
+                            # new_name = f"{field_def['type']}{config.Sys}{field_def['name']}".replace("_", "-")
+                            if not [t for t in schema.get("types", []) if t["name"] == new_name]:
+                                schema["types"].append({
+                                    "name": new_name,
+                                    "type": "ArrayOf",
+                                    "options": type_opts,
+                                    "description": field_def["description"]
+                                })
+                            field_def.update(
+                                type=new_name,
+                                options=field_opts
+                            )
+
+            return schema
+
+        def remove_derived_enum(schema: dict) -> dict:
+            opt_checks = {
+                "enum": lambda v: True,
+                "ktype": lambda v: v.startswith("$"),
+                "vtype": lambda v: v.startswith("$")
+            }
+
+            for type_def in schema.get("types", []):
+                if type_def["type"] in ("ArrayOf", "Enumerated", "MapOf"):
+                    for opt_name, opt_check in opt_checks.items():
+                        opt = type_def["options"].get(opt_name, None)
+                        if opt and opt_check(opt):
+                            opt = opt[1:] if opt.startswith("$") else opt
+                            orig_type = [t for t in schema.get("types", []) if t["name"] == opt]
+                            if len(orig_type) != 1:
+                                raise TypeError(f"Type of {opt} does not exist within the schema")
+
+                            orig_type = orig_type[0]
+                            new_name = f"{opt}{config.Sys}Enum".replace("_", "-")
+                            if not [t for t in schema.get("types", []) if t["name"] == new_name]:
+                                schema["types"].append({
+                                    "name": new_name,
+                                    "type": "Enumerated",
+                                    "options": Options(),
+                                    "description": f"Derived enumeration of {opt}",
+                                    "fields": [{"id": f["id"], "value": f["name"], "description": f["description"]} for f in orig_type.get("fields", [])]
+                                })
+                            setattr(type_def["options"], opt_name, new_name)
+
+            return schema
+
+        def remove_map_of_enum(schema: dict) -> dict:
+            for idx, type_def in enumerate(schema.get("types", [])):
+                if type_def["type"] == "MapOf":
+                    key_type = [t for t in schema.get("types", []) if t["name"] == type_def["options"].ktype]
+                    value_type = type_def["options"].vtype
+                    if len(key_type) != 1:
+                        raise TypeError(f"Type of {type_def['options'].ktype} does not exist within the schema")
+                    key_type = key_type[0]
+                    if key_type["type"] == "Enumerated":
+                        delattr(type_def["options"], "ktype")
+                        delattr(type_def["options"], "vtype")
+                        schema["types"][idx] = {
+                            "name": type_def["name"],
+                            "type": "Map",
+                            "options": type_def["options"],
+                            "description": type_def["description"],
+                            "fields": [dict(id=f["id"], name=f["value"], type=value_type, options=Options(), description=f["description"]) for f in key_type.get("fields", [])]
+                        }
+
+            return schema
+
+        schema = (schema if isinstance(schema, dict) else schema.schema()) if schema else self.schema()
+        simple_schema = self._convert_types(schema)
+
+        simple_schema = remove_anonymous_type(simple_schema) if anon else simple_schema
+        simple_schema = remove_multiplicity(simple_schema) if multi else simple_schema
+        simple_schema = remove_derived_enum(simple_schema) if derived else simple_schema
+        simple_schema = remove_map_of_enum(simple_schema) if map_of else simple_schema
+        simple_schema = self._convert_types(simple_schema)
+
+        return simple_schema if simple else Schema(simple_schema)
 
     def load(self, fname: Union[str, BufferedIOBase, TextIOBase]) -> None:
         """
@@ -364,7 +515,7 @@ class Schema(BaseModel):
             raise errors[0]
 
     # Helper Functions
-    def _setSchema(self, data: dict) -> None:
+    def _setSchema(self, data: Union[dict, "Schema"]) -> None:
         """
         Reset the schema based on the given data
         :param data:
@@ -374,6 +525,7 @@ class Schema(BaseModel):
             raise TypeError("Cannot load schema, incorrect type")
 
         self.meta = Meta(data.get("meta", {}))
+        data = self.simplify(data, False, True, False, False)
         super(Schema, self).__init__(data, _config=self)
 
         for type_name, type_def in tuple(self.types.items()):
@@ -423,4 +575,55 @@ class Schema(BaseModel):
         if fmt in self.formats and not override:
             raise FormatError(f"format {fmt} is already defined, user arg `override=True` to override format validation")
         self._formats[fmt] = fun
+
+    def _convert_types(self, schema: dict) -> dict:
+        type_keys = ("name", "type", "options", "description", "fields")
+        gen_field_keys = ("id", "name", "type", "options", "description")
+        enum_field_keys = ("id", "value", "description")
+        schema = copy.deepcopy(schema)
+
+        if "types" in schema:
+            if all(isinstance(t, dict) for t in schema["types"]):
+                # convert dict types to list
+                schema_types = []
+                for type_def in schema.get("types", []):
+                    type_def["options"] = type_def["options"].schema(type_def["type"])
+                    field_keys = enum_field_keys if type_def["type"] == "Enumerated" else gen_field_keys
+                    if "fields" in type_def:
+                        tmp_fields = []
+                        for field in type_def["fields"]:
+                            if "options" in field:
+                                field["options"] = field["options"].schema(field["type"], field["name"], True)
+                            tmp_fields.append([field[f] for f in field_keys if f in field])
+                        type_def["fields"] = tmp_fields
+
+                    type_def = [type_def[f] for f in type_keys if f in type_def]
+                    schema_types.append(type_def)
+
+                schema["types"] = schema_types
+            elif all(isinstance(t, list) for t in schema["types"]):
+                # convert list types to dict
+                schema_types = []
+                for type_def in schema.get("types", []):
+                    type_def = dict(zip(type_keys, type_def))
+                    type_def["options"] = Options(type_def["options"])
+                    field_keys = enum_field_keys if type_def["type"] == "Enumerated" else gen_field_keys
+                    if "fields" in type_def:
+                        tmp_fields = []
+                        for field in type_def["fields"]:
+                            field = dict(zip(field_keys, field))
+                            if "options" in field:
+                                field["options"] = Options(field["options"])
+                            tmp_fields.append(field)
+
+                        type_def["fields"] = tmp_fields
+
+                    schema_types.append(type_def)
+                schema["types"] = schema_types
+            else:
+                raise TypeError("Schema types improperly formatted")
+
+        return schema
+
+
 

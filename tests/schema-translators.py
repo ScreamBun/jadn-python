@@ -90,6 +90,15 @@ class Conversions(object):
         for k, v in self._schema_obj.analyze().items():
             print(f"{k}: {v}")
 
+    def Simplify(self):
+        print("JADN --> Simplify JADN")
+        with open(os.path.join(self._test_dir, self._schema + '.init_simple.jadn'), "w") as f:
+            self._schema_obj.dump(f)
+
+        simple_schema = self._schema_obj.simplify(simple=False)
+        with open(os.path.join(self._test_dir, self._schema + '.simple.jadn'), "w") as f:
+            simple_schema.dump(f)
+
     def prettyFormat(self):
         print("JADN --> Formatted JADN")
         self._schema_obj.dump(f"{self._test_dir}/{self._schema}_reorg.jadn")
@@ -97,7 +106,7 @@ class Conversions(object):
 
 if __name__ == '__main__':
     schema = 'oc2ls-v1.0-csprd03-update'
-    # schema = 'oc2ls-v1.0-wd14_update'
+    # schema = 'oc2ls-v1.0-csprd03-update_fix'
     conversions = Conversions(schema)
     validConvert = (
         # "CDDL",
@@ -109,6 +118,7 @@ if __name__ == '__main__':
         "MarkDown",
         # "ProtoBuf",
         # "Relax_NG",
+        "Simplify",
         # "Thrift",
         # "prettyFormat"
     )
