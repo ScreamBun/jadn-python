@@ -81,7 +81,8 @@ class JADNtoJSON(base.WriterBase):
 
     _schema_order: Tuple[str] = ("$schema", "$id", "title", "type", "$ref", "const", "description",
                                  "additionalProperties", "minProperties", "maxProperties", "minItems", "maxItems",
-                                 "oneOf", "required", "items", "format", "contentEncoding", "properties", "definitions")
+                                 "oneOf", "required", "uniqueItems", "items", "format", "contentEncoding",
+                                 "properties", "definitions")
 
     _validationMap: Dict[str, Union[str, None]] = {
         # JADN: JSON
@@ -124,7 +125,7 @@ class JADNtoJSON(base.WriterBase):
         :param comm: Level of comments to include in converted schema
         :return: None
         """
-        self.comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
+        self._comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
 
         with open(fname, "w") as f:
             if source:
@@ -137,7 +138,7 @@ class JADNtoJSON(base.WriterBase):
         :param comm: Level of comments to include in converted schema
         :return: JSON schema
         """
-        self.comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
+        self._comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
         json_schema = dict(
             **self.makeHeader(),
             type="object",
@@ -146,7 +147,7 @@ class JADNtoJSON(base.WriterBase):
                 "description": self._cleanComment(t.description or "<Fill Me In>")
             } for t in self._types if t.name in self._meta.exports]
         )
-        defs = {k: v for s in self._makeStructures(default={}) for k, v in s.items()}
+        defs = {k: v for d in self._makeStructures(default={}).values() for k, v in d.items()}
 
         if self._hasBinary:
             defs["Binary"] = dict(
@@ -185,7 +186,7 @@ class JADNtoJSON(base.WriterBase):
         opts = self._optReformat("array", itm.options, False)
         if 'pattern' in opts:
             array_json = dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="string",
                 description=self._cleanComment(itm.description),
                 **opts
@@ -210,13 +211,11 @@ class JADNtoJSON(base.WriterBase):
         """
         vtype = itm.options.get("vtype", "String")
         arrayof_def = dict(
-            title=itm.name.replace("-", " "),
+            title=self.formatTitle(itm.name),
             type="array",
             description=self._cleanComment(itm.description),
             **self._optReformat("array", itm.options, False)
         )
-        if hasattr(itm.options, "unique"):
-            arrayof_def["unique"] = True
 
         if vtype.startswith("$"):
             val_def = list(filter(lambda d: d.name == vtype[1:], self._types))
@@ -243,7 +242,7 @@ class JADNtoJSON(base.WriterBase):
         """
         return {
             self.formatStr(itm.name): self._cleanEmpty(dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="object",
                 description=self._cleanComment(itm.description),
                 additionalProperties=False,
@@ -264,7 +263,7 @@ class JADNtoJSON(base.WriterBase):
 
         return {
             self.formatStr(itm.name): self._cleanEmpty(dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="integer" if use_id else "string",
                 description=self._cleanComment(itm.description),
                 **self._optReformat("object", itm.options, False),
@@ -283,7 +282,7 @@ class JADNtoJSON(base.WriterBase):
         """
         return {
             self.formatStr(itm.name): self._cleanEmpty(dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="object",
                 description=self._cleanComment(itm.description),
                 additionalProperties=False,
@@ -310,7 +309,7 @@ class JADNtoJSON(base.WriterBase):
 
         return {
             self.formatStr(itm.name): self._cleanEmpty(dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="object",
                 description=self._cleanComment(itm.description),
                 additionalProperties=False,
@@ -329,7 +328,7 @@ class JADNtoJSON(base.WriterBase):
         """
         return {
             self.formatStr(itm.name): self._cleanEmpty(dict(
-                title=itm.name.replace("-", " "),
+                title=self.formatTitle(itm.name),
                 type="object",
                 description=self._cleanComment(itm.description),
                 additionalProperties=False,
@@ -346,7 +345,7 @@ class JADNtoJSON(base.WriterBase):
         :return: formatted custom
         """
         custom_json = dict(
-            title=itm.name.replace("-", " "),
+            title=self.formatTitle(itm.name),
             **self._getFieldType(itm.type),
             description=self._cleanComment(itm.description)
         )
@@ -498,9 +497,13 @@ class JADNtoJSON(base.WriterBase):
         field_type = field_def.get("type", "")
         field_type = field_def.get("$ref", "") if field_type == "" else field_type
         field_type = self._getType(field_type.split("/")[-1]) if field_type.startswith("#") else field_type
+        field_opts = self._optReformat(field_type, field.options, base_ref=ref)
+        if field_def.get("type", "") == "array" and "minItems" not in field_opts:
+            field_opts["minItems"] = 1
+
         field_def.update(
             description=self._cleanComment(field.description),
-            **self._optReformat(field_type, field.options, base_ref=ref)
+            **field_opts
         )
         field_def.pop("title", None)
         if field_def.get("type") != "string":

@@ -12,6 +12,7 @@ from io import (
 from typing import (
     Any,
     Callable,
+    Dict,
     Tuple,
     Union
 )
@@ -92,7 +93,6 @@ class WriterBase(object):
     Base JADN Converter
     """
     format: str = None
-
     escape_chars: Tuple[str] = (" ", )
 
     # Non Override
@@ -104,13 +104,15 @@ class WriterBase(object):
                                      "Feature", "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr",
                                      "L4-Protocol", "Message-Type", "Nsid", "Payload", "Port", "Response-Type",
                                      "Versions", "Version", "Profiles", "Rate-Limit", "Binary", "Command-ID")
-
     _indent: str = " " * 2
-
     _meta_order: Tuple[str] = ("title", "module", "patch", "description", "exports", "imports", "config")
-
+    _title_overrides: Dict[str, str] = {
+        "Addr": "Address",
+        "IDN": "Internationalized",
+        "L4": "Layer 4",
+        "Nsid": "Namespace Identifier"
+    }
     _space_start = re.compile(r"^\s+", re.MULTILINE)
-
     _table_field_headers: utils.FrozenDict = utils.FrozenDict({
         "#": "options",
         "Description": "description",
@@ -141,7 +143,7 @@ class WriterBase(object):
         raise NotImplemented(f"{self.__class__.__name__} does not implement `dumps` as a class function")
 
     # Helper Functions
-    def _makeStructures(self, default: Any = None, *args, **kwargs) -> dict:
+    def _makeStructures(self, default: Any = None, *args, **kwargs) -> Dict[str, Union[dict, str]]:
         """
         Create the type definitions for the schema
         :return: type definitions for the schema
@@ -153,6 +155,10 @@ class WriterBase(object):
             structs[t.name] = df(t, *args, **kwargs) if df else default
 
         return structs
+
+    def formatTitle(self, title: str) -> str:
+        words = [self._title_overrides.get(w, w) for w in title.split("-")]
+        return " ".join(words)
 
     def formatStr(self, s: str) -> str:
         """

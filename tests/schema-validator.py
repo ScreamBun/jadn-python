@@ -27,7 +27,7 @@ rsp = {
     "status_text": "string",
     "results": {
         # "x-command": {"ref": "INTERNALREFERENCEVALUEABC123"}
-        "pairs": {"scan": ["file"]}
+        "pairs": {"scan": ["file"], "query": ["features"]}
     }
 }
 

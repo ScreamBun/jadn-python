@@ -6,7 +6,7 @@
 
 ## Working Draft 01
 
-## 20 September 2019
+## 29 November 2019
 
 ### Technical Committee:
 * [OASIS Open Command and Control (OpenC2) TC](https://www.oasis-open.org/committees/openc2/)
@@ -469,7 +469,7 @@ which data values are instances of the defined type.
 | 0x3d `'='` | id | none | If present, Enumerated values and fields of compound types are denoted by FieldID rather than FieldName ([Section 3.2.1.1](#3211-field-identifiers)) |
 | 0x2a `'*'` | vtype | String | Value type for ArrayOf and MapOf ([Section 3.2.1.2](#3212-value-type)) |
 | 0x2b `'+'` | ktype | String | Key type for MapOf ([Section 3.2.1.3](#3213-key-type)) |
-| 0x24 `'$'` | enum | String | Extension: Enumerated type derived from the specified Array, Choice, Map or Record type ([Section 3.3.3](#333-derived-enumerations)) |
+| 0x23 `'#'` | enum | String | Extension: Enumerated type derived from the specified Array, Choice, Map or Record type ([Section 3.3.3](#333-derived-enumerations)) |
 | **Validation** | | | |
 | 0x2f `'/'` | format | String | Semantic validation keyword from [Section 3.2.1.5](#3215-semantic-validation) |
 | 0x25 `'%'` | pattern | String | Regular expression used to validate a String type ([Section 3.2.1.6](#3216-pattern)) |
@@ -789,10 +789,10 @@ in the option rather than being listed individually in the definition.
 Simplifying removes *enum* from Type Options and adds fields containing
 FieldID, FieldName, and FieldDescription from each field of the referenced type.
 
-In JADN-IDL ([Section 5.1](#51-jadn-idl-format)) format the *enum* option is represented
+In JADN-IDL ([Section 5.1](#51-jadn-idl-format)) the *enum* option is represented
 as a function string: "Enum(\<referenced-type\>)".
-Within ArrayOf and MapOf types, the *ktype* and *vtype* option values are "Enum()" function
-strings.
+Within ArrayOf and MapOf types, the *ktype* and *vtype* options may contain an enum option.  As an
+example the IDL value "ArrayOf(Enum(Pixel))" corresponds to the JADN vtype option "*#Pixel".
 
 Simplifying references an explicit Enumerated type if it exists, otherwise it creates an explicit
 Enumerated type. It then replaces the type reference with the name of the explicit Enumerated type.
@@ -1039,7 +1039,7 @@ FIELDSTRING is the value of TYPESTRING combined with string representations of t
                   | " optional"
     TFIELD        = "(&" *tfield* ")"
 
-An ABNF grammar for JADN-IDL is shown in [Appendix E](#appendix-e-abnf-grammar-for-jadn-idl).
+An ABNF grammar for JADN-IDL is shown in [Appendix F](#appendix-f-abnf-grammar-for-jadn-idl).
 
 ### 5.2 Table Style
 Some specifications present type definitions in property table form, using varied style conventions.
@@ -1356,8 +1356,8 @@ This appendix contains the JADN definitions corresponding to all JADN-IDL defini
     [2, "green", "Integer", [], ""],
     [3, "blue", "Integer", [], ""]
 ]],
-["Channel", "Enumerated", ["$Pixel"], "Derived Enumerated type"],
-["ChannelMask", "ArrayOf", ["*Enum(Pixel)"], "ArrayOf(derived enumeration)"],
+["Channel", "Enumerated", ["#Pixel"], "Derived Enumerated type"],
+["ChannelMask", "ArrayOf", ["*#Pixel"], "ArrayOf(derived enumeration)"],
 
 ["Channel", "Enumerated", [], "", [
     [1, "red", ""],
@@ -1385,7 +1385,7 @@ Note that the order of elements in **TypeOptions** and **FieldOptions** is not s
   "patch": "0-wd01",
   "title": "JADN Syntax",
   "description": "Syntax of a JSON Abstract Data Notation (JADN) module.",
-  "exports": ["Schema", "Namespace"],
+  "exports": ["Schema"],
   "config": {
     "$FieldName": "^[$A-Za-z][_A-Za-z0-9]{0,31}$"
   }
@@ -1482,7 +1482,147 @@ Note that the order of elements in **TypeOptions** and **FieldOptions** is not s
  ]
 }
 ```
-# Appendix E. ABNF Grammar for JADN IDL
+# Appendix E. JSON Schema for JADN
+
+A JADN module has the following structure:
+```
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$id": "http://oasis-open.org/openc2/jadn/v1.0",
+  "type": "object",
+  "required": ["meta", "types"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["module"],
+      "additionalProperties": false,
+      "properties": {
+        "module": {"type": "string"},
+        "patch": {"type": "string"},
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "imports": {"$ref": "#/definitions/Imports"},
+        "exports": {"$ref": "#/definitions/Exports"},
+        "config": {"$ref": "#/definitions/Config"}
+      }
+    },
+    "types": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 5,
+        "items": [
+          {"$ref": "#/definitions/TypeName"},
+          {"$ref": "#/definitions/BaseType"},
+          {"$ref": "#/definitions/Options"},
+          {"$ref": "#/definitions/Description"},
+          {"anyOf": [
+            {"$ref": "#/definitions/Items"},
+            {"$ref": "#/definitions/Fields"}
+          ]}
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "Imports": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/definitions/NSID"},
+      "patternProperties": {
+        "": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "Exports": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "Config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$MaxBinary": {"type": "integer", "minValue": 1},
+        "$MaxString": {"type": "integer", "minValue": 1},
+        "$MaxElements": {"type": "integer", "minValue": 1},
+        "$Sys": {"type": "string", "minLength": 1, "maxLength": 1},
+        "$FS": {"type": "string", "minLength": 1, "maxLength": 1},
+        "$TypeName": {"type": "string", "minLength": 1, "maxLength": 127},
+        "$FieldName": {"type": "string", "minLength": 1, "maxLength": 127},
+        "$NSID": {"type": "string", "minLength": 1, "maxLength": 127}
+      }
+    },
+    "Items": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": [
+          {"type": "integer"},
+          {"type": "string"},
+          {"$ref": "#/definitions/Description"}
+        ]
+      }
+    },
+    "Fields": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 5,
+        "maxItems": 5,
+        "items": [
+          {"type": "integer"},
+          {"$ref": "#/definitions/FieldName"},
+          {"$ref": "#/definitions/TypeRef"},
+          {"$ref": "#/definitions/Options"},
+          {"$ref": "#/definitions/Description"}
+        ]
+      }
+    },
+    "NSID": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,7}$",
+      "description": "Namespace Identifier, defined in Imports, used in type references"
+    },
+    "TypeName": {
+      "type": "string",
+      "pattern": "^[A-Z][-$A-Za-z0-9]{0,31}$",
+      "description": "Default Type Name per section 3.1.1 Name Formats"
+    },
+    "TypeRef": {
+      "type": "string",
+      "pattern": "^([a-z][a-z0-9]{0,7}:)?[A-Z][-$A-Za-z0-9]{0,31}$",
+      "description": "TypeName with optional namespace ID prefix, MUST agree with NSID and TypeName"
+    },
+    "FieldName": {
+      "type": "string",
+      "pattern": "^[a-z][_A-Za-z0-9]{0,31}$",
+      "description": "Default Field Name per section 3.1.1 Name Formats"
+    },
+    "BaseType": {
+      "type": "string",
+      "enum": ["Binary", "Boolean", "Integer", "Number", "Null", "String",
+               "Enumerated", "Choice",
+               "Array", "ArrayOf", "Map", "MapOf", "Record"]
+    },
+    "Options": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "Description": {
+      "type": "string"
+    }
+  }
+}
+```
+
+In order to validate the JADN meta-schema, FieldName should be the pattern configured in Appendix D. 
+
+# Appendix F. ABNF Grammar for JADN IDL
 
 [Case-sensitive](#rfc7405) [ABNF](#rfc5234) grammar for JADN Interface Definition Language ([Section 5.1](#51-jadn-idl-format)).
 
@@ -1508,4 +1648,3 @@ SP          = " "
 VCHAR       = %x21-7E
 WSP         = SP / HTAB
 ```
-

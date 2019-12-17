@@ -175,9 +175,10 @@ class Schema(BaseModel):
                                      "Status-Code", "Results", "Artifact", "Device", "Domain-Name", "Email-Addr",
                                      "Features", "File", "IDN-Domain-Name", "IDN-Email-Addr", "IPv4-Net",
                                      "IPv4-Connection", "IPv6-Net", "IPv6-Connection", "IRI", "MAC-Addr", "Process",
-                                     "Properties", "URI", "Action-Targets", "Date-Time", "Duration", "Feature",
-                                     "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr", "L4-Protocol",
-                                     "Message-Type", "Nsid", "Payload", "Port", "Response-Type", "Version")
+                                     "Properties", "URI", "Action-Targets", "Targets", "Date-Time", "Duration",
+                                     "Feature", "Hashes", "Hostname", "IDN-Hostname", "IPv4-Addr", "IPv6-Addr",
+                                     "L4-Protocol", "Message-Type", "Nsid", "Payload", "Port", "Response-Type",
+                                     "Versions", "Version", "Profiles", "Rate-Limit", "Binary", "Command-ID")
     _schema_types: Set[str]
 
     __slots__ = ("meta", "types")
@@ -234,7 +235,7 @@ class Schema(BaseModel):
             Return namespace if name has a known namespace, otherwise return full name
             """
             nsp = name.split(":")[0]
-            return nsp if nsp in nsids else name
+            return nsp if nsp in nsids else re.sub(fr"^{Options.enum_id}", "", name)
 
         for tn, td in self.types.items():
             type_deps[tn] = {ns(dep) for dep in td.dependencies}
@@ -337,8 +338,8 @@ class Schema(BaseModel):
         def remove_derived_enum(schema: dict) -> dict:
             opt_checks = {
                 "enum": lambda v: True,
-                "ktype": lambda v: v.startswith("$"),
-                "vtype": lambda v: v.startswith("$")
+                "ktype": lambda v: v.startswith(Options.enum_id),
+                "vtype": lambda v: v.startswith(Options.enum_id)
             }
 
             for type_def in schema.get("types", []):
@@ -346,7 +347,7 @@ class Schema(BaseModel):
                     for opt_name, opt_check in opt_checks.items():
                         opt = type_def["options"].get(opt_name, None)
                         if opt and opt_check(opt):
-                            opt = opt[1:] if opt.startswith("$") else opt
+                            opt = opt[1:] if opt.startswith(Options.enum_id) else opt
                             orig_type = [t for t in schema.get("types", []) if t["name"] == opt]
                             if len(orig_type) != 1:
                                 raise TypeError(f"Type of {opt} does not exist within the schema")
@@ -525,7 +526,7 @@ class Schema(BaseModel):
             raise TypeError("Cannot load schema, incorrect type")
 
         self.meta = Meta(data.get("meta", {}))
-        data = self.simplify(data, False, True, False, False)
+        data = self.simplify(data, True, True, False, False)
         super(Schema, self).__init__(data, _config=self)
 
         for type_name, type_def in tuple(self.types.items()):

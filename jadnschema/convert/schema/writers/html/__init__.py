@@ -2,7 +2,6 @@
 JADN to JADN IDL
 """
 import json
-import lesscpy
 import os
 import re
 
@@ -341,14 +340,12 @@ class JADNtoHTML(WriterBase):
             return open(self._themeFile, "r").read() if os.path.isfile(self._themeFile) else ""
 
         fname, ext = os.path.splitext(styles)
-        if ext not in [".css", ".less"]:  # Check valid theme format
+        if ext != ".css":  # Check valid theme format
             raise TypeError("Styles are not in css or less format")
 
         if os.path.isfile(styles):
             if ext == ".css":
                 return open(styles, "r").read()
-            elif ext == ".less":
-                return lesscpy.compile(open(styles, "r"))
             else:
                 raise ValueError("The style format specified is an unknown format")
         else:

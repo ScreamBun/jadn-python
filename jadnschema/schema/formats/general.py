@@ -79,7 +79,6 @@ else:
         except Exception as e:
             return e
 
-
     # Definition taken from: https://tools.ietf.org/html/draft-handrews-relative-json-pointer-01#section-3
     @utils.addKey(d=GeneralFormats, k="relative-json-pointer")
     def relative_json_pointer(val: str) -> Optional[Exception]:

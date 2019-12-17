@@ -105,8 +105,8 @@ class Conversions(object):
 
 
 if __name__ == '__main__':
-    schema = 'oc2ls-v1.0-csprd03-update'
-    # schema = 'oc2ls-v1.0-csprd03-update_fix'
+    # schema = 'oc2ls-v1.0-csprd03-update'
+    schema = 'oc2ls-v1.0-csprd03-update_fix'
     conversions = Conversions(schema)
     validConvert = (
         # "CDDL",
@@ -114,13 +114,13 @@ if __name__ == '__main__':
         # "JADN",
         # "JAS",
         "JIDL",
-        # "JSON",
+        "JSON",
         "MarkDown",
         # "ProtoBuf",
         # "Relax_NG",
         "Simplify",
         # "Thrift",
-        # "prettyFormat"
+        "prettyFormat"
     )
 
     conversions.Analyze()

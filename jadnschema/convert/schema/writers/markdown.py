@@ -142,6 +142,7 @@ class JADNtoMD(WriterBase):
         """
         fmt = ".ID" if hasattr(itm.options, "id") else ""
         enumerated_md = f"**_Type: {itm.name} (Enumerated{fmt})_**\n\n"
+
         fields = []
         for f in itm.fields:
             f.description = f.description[:-1] if f.description.endswith(".") else f.description

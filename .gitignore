@@ -197,3 +197,4 @@ fabric.properties
 # Custom Ignore
 .idea
 tests/schema_gen
+jadn-v1.0-wd01.md

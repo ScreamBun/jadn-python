@@ -72,7 +72,7 @@ class Options(base.BaseModel):
         "]": "maxc",        # Maximum cardinality
         "&": "tfield",      # Field that specifies the type of this field, value is Enumerated
         # Type Structural
-        "$": "enum",        # Enumerated type derived from the specified Array, Choice, Map or Record type
+        "#": "enum",        # Enumerated type derived from the specified Array, Choice, Map or Record type
         "=": "id",          # If present, Enumerated values and fields of compound types are denoted by FieldID rather than FieldName
         "+": "ktype",       # Key type for MapOf
         "*": "vtype",       # Value type for ArrayOf and MapOf
@@ -83,6 +83,7 @@ class Options(base.BaseModel):
         "%": "pattern",     # Regular expression used to validate a String type
         "q": "unique",      # If present, an ArrayOf instance must not contain duplicate values
     }
+    enum_id = [*_ids.keys()][[*_ids.values()].index("enum")]
     _validFormats: List[str] = [
         # JSON Formats
         "date-time",                # RFC 3339 Section 5.6
@@ -170,7 +171,7 @@ class Options(base.BaseModel):
         for opt in self.__slots__:
             val = getattr(self, opt, None)
             if val is not None:
-                val = val.replace("_Enum-", "$") if opt == "vtype" and val.startswith("_Enum") else val
+                val = val.replace("_Enum-", self.enum_id) if opt == "vtype" and val.startswith("_Enum") else val
                 rtn.append(f"{ids.get(opt)}{'' if opt in self._boolOpts else val}")
 
         return rtn
