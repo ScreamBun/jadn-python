@@ -172,7 +172,7 @@ class JADNtoJSON(base.WriterBase):
         return self._cleanEmpty({
             "$schema": "http://json-schema.org/draft-07/schema#",
             "$id": schema_id if schema_id.endswith(".json") else f"{schema_id}.json",
-            "title": self._meta.title if hasattr(self._meta, "title") else (self._meta.module + (f" v.{self._meta.patch}" if hasattr(self._meta, "patch") else "")),
+            "title": self._meta.title if hasattr(self._meta, "title") else (module + (f" v.{self._meta.patch}" if hasattr(self._meta, "patch") else "")),
             "description": self._cleanComment(self._meta.get("description", ""))
         })
 

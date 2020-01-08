@@ -35,7 +35,7 @@ class Conversions(object):
         convert.html_dump(self._schema_obj, os.path.join(self._test_dir, self._schema + '.html'))
 
     def JADN(self):
-        print("Convert: JADN --> JAS")
+        print("Convert: JADN --> JADN")
         convert.jadn_dump(self._schema_obj, os.path.join(self._test_dir, self._schema + '.all.jadn'), comm=CommentLevels.ALL)
         convert.jadn_dump(self._schema_obj, os.path.join(self._test_dir, self._schema + '.none.jadn'), comm=CommentLevels.NONE)
 
@@ -110,8 +110,8 @@ if __name__ == '__main__':
     conversions = Conversions(schema)
     validConvert = (
         # "CDDL",
-        # "HTML",
-        # "JADN",
+        "HTML",
+        "JADN",
         # "JAS",
         "JIDL",
         "JSON",

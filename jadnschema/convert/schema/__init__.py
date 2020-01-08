@@ -106,11 +106,11 @@ jadn_dumps = partial(dumps, fmt="jadn")
 
 # JADN IDL
 register_writer(fmt=writers.JADNtoIDL)
-register_reader(fmt=readers.IDLtoJADN)
+# register_reader(fmt=readers.IDLtoJADN)
 jidl_dump = partial(dump, fmt="jidl")
 jidl_dumps = partial(dumps, fmt="jidl")
-jidl_load = partial(load, fmt="jidl")
-jidl_loads = partial(loads, fmt="jidl")
+# jidl_load = partial(load, fmt="jidl")
+# jidl_loads = partial(loads, fmt="jidl")
 
 # JSON
 register_writer(fmt=writers.JADNtoJSON)
@@ -175,8 +175,8 @@ __all__ = [
     # 'jadn_loads',
     # 'jas_load',
     # 'jas_loads',
-    'jidl_load',
-    'jidl_loads',
+    # 'jidl_load',
+    # 'jidl_loads',
     # 'json_load',
     # 'json_loads',
     # 'proto_load',
@@ -190,7 +190,6 @@ __all__ = [
     'dumps',
     'load',
     'loads',
-    # *dynamic_funs,
     # Helpers
     'register_reader',
     'register_writer'

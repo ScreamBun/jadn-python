@@ -1,15 +1,16 @@
 """
 JADN to JADN IDL
 """
+import copy
 import json
 import os
 import re
 
 from datetime import datetime
 
-from ...base import WriterBase
+from jadnschema.convert.schema.base import WriterBase
 
-from ..... import schema
+from jadnschema import schema
 
 
 class JADNtoHTML(WriterBase):
@@ -64,7 +65,10 @@ class JADNtoHTML(WriterBase):
         :return: header for schema
         """
         def mkrow(k, v):
-            if type(v) is list:
+            if isinstance(v, dict) or hasattr(v, "schema"):
+                v = v.schema() if hasattr(v, "schema") else v
+                v = ", ".join([f"**{k1}**: {v1}" for k1, v1 in v.items()])
+            elif isinstance(v, (list, tuple)):
                 v = ", ".join(["**{}**: {}".format(*i) for i in v] if type(v[0]) is list else v) if len(v) > 0 else "N/A"
             return f"<tr><td class=\"h\">{k}:</td><td class=\"s\">{v}</td></tr>"
 
@@ -116,6 +120,10 @@ class JADNtoHTML(WriterBase):
         desc = "" if itm.description == "" else f"<h4>{itm.description}</h4>"
         array_html = f"<h3>3.2.{idx} {self.formatStr(itm.name)}</h3>{desc}"
 
+        rows = copy.copy(itm.fields)
+        for r in rows:
+            r.description = f"\"{r.name}\": {r.description}"
+
         array_table = self._makeTable(
             headers={
                 "ID": {"class": "n"},
@@ -123,7 +131,7 @@ class JADNtoHTML(WriterBase):
                 "#": {"class": "n"},
                 "Description": {"class": "s"},
             },
-            rows=[schema.Field(row, description=f"\"{row.name}\": {row.description}") for row in itm.fields],
+            rows=rows,
             caption=f"{self.formatStr(itm.name)} (Array)"
         )
 
