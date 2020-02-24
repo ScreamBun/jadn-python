@@ -55,7 +55,8 @@ def uri(val: str) -> Optional[Exception]:
         result = urlparse(val)
         if not all([result.scheme, result.netloc, result.path]) or url_match:
             return ValueError(f"URI given is not expected valid")
-    except Exception:
+    except Exception:  # pylint: disable=broad-except
+        # TODO: change to better exception
         return ValueError(f"URI given is not expected valid")
 
 
@@ -76,7 +77,8 @@ else:
 
         try:
             jsonpointer.JsonPointer(val)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # TODO: change to better exception
             return e
 
     # Definition taken from: https://tools.ietf.org/html/draft-handrews-relative-json-pointer-01#section-3
@@ -103,7 +105,8 @@ else:
             break
         try:
             (rest == "#") or jsonpointer.JsonPointer(rest)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # TODO: change to better exception
             return e
 
 
@@ -119,7 +122,8 @@ def regex(val: str) -> Optional[Exception]:
 
     try:
         re.compile(val)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
+        # TODO: change to better exception
         return e
 
 
@@ -181,7 +185,7 @@ def unsigned(n: int, val: Union[bytes, int]) -> Optional[Exception]:
 
     # Unsigned Integer
     if isinstance(val, int):
-        msg = "cannot be negative" if 0 > val else (f"cannot be greater than {max_val:,}" if val > max_val else None)
+        msg = "cannot be negative" if val < 0 else (f"cannot be greater than {max_val:,}" if val > max_val else None)
         return ValueError(f"unsigned integer given is invalid, {msg}") if msg else None
 
     # Unsigned Bytes

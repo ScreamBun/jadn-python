@@ -12,19 +12,9 @@ from typing import (
     Union
 )
 
-from jadnschema.schema import (
-    definitions,
-    fields
-)
-
-from .. import (
-    base,
-    enums
-)
-
-from .... import (
-    schema
-)
+from .. import base, enums
+from .... import exceptions, schema
+from ....schema import definitions, fields
 
 
 class JADNtoJSON(base.WriterBase):
@@ -84,8 +74,8 @@ class JADNtoJSON(base.WriterBase):
                                  "oneOf", "required", "uniqueItems", "items", "format", "contentEncoding",
                                  "properties", "definitions")
 
+    # JADN: JSON
     _validationMap: Dict[str, Union[str, None]] = {
-        # JADN: JSON
         # JADN
         "b": "binary",
         "eui": None,
@@ -117,7 +107,7 @@ class JADNtoJSON(base.WriterBase):
         "uri-template": "uri-template",  # Draft 6
     }
 
-    def dump(self, fname: str, source: str = None, comm: str = None) -> None:
+    def dump(self, fname: str, source: str = None, comm: str = enums.CommentLevels.ALL, **kwargs) -> None:
         """
         Produce JSON schema from JADN schema and write to file provided
         :param fname: Name of file to write
@@ -132,7 +122,7 @@ class JADNtoJSON(base.WriterBase):
                 f.write(f"; Generated from {source}, {datetime.ctime(datetime.now())}\n")
             json.dump(self.dumps(comm), f, indent=2)
 
-    def dumps(self, comm: str = None) -> dict:
+    def dumps(self, comm: str = enums.CommentLevels.ALL, **kwargs) -> dict:
         """
         Converts the JADN schema to JSON
         :param comm: Level of comments to include in converted schema
@@ -338,7 +328,7 @@ class JADNtoJSON(base.WriterBase):
             ))
         }
 
-    def _formatCustom(self, itm: definitions.Definition) -> dict:
+    def _formatCustom(self, itm: definitions.CustomDefinition) -> dict:
         """
         Formats custom for the given schema type
         :param itm: custom to format
@@ -350,13 +340,11 @@ class JADNtoJSON(base.WriterBase):
             description=self._cleanComment(itm.description)
         )
 
-        # TODO: Fix ME!!
         opts = self._optReformat(itm.type, itm.options, base_ref=True)
         keys = {*custom_json.keys()}.intersection({*opts.keys()})
         if keys:
             keys = {k: (custom_json[k], opts[k]) for k in keys}
             print(f"{itm.name} Key duplicate - {keys}")
-            # map(opts.pop, keys)
 
         if any(k in opts for k in ("pattern", "format")):
             custom_json.pop("$ref", None)
@@ -379,14 +367,14 @@ class JADNtoJSON(base.WriterBase):
         type_def = [t for t in self._types if t.name == name]
         return (type_def[0] if len(type_def) == 1 else {}).get("type", "String")
 
-    def _optReformat(self, optType: str, opts: schema.Options, base_ref: bool = False) -> dict:
+    def _optReformat(self, opt_type: str, opts: schema.Options, base_ref: bool = False) -> dict:
         """
         Reformat options for the given schema
         :param optType: type to reformat the options for
         :param opts: original options to reformat
         :return: dict - reformatted options
         """
-        optType = optType.lower()
+        optType = opt_type.lower()
         optKeys = self._getOptKeys(optType)
         r_opts = {}
 
@@ -440,7 +428,7 @@ class JADNtoJSON(base.WriterBase):
                 rtn.pop("title", None)
                 return rtn
 
-            elif field.type in self._fieldMap:
+            if field.type in self._fieldMap:
                 rtn = {"type": self.formatStr(self._fieldMap.get(field.type, field.type))}
                 if field.type.lower() == "binary":
                     if getattr(field.options, "format", None) not in ("b", "binary", "x", None):
@@ -453,20 +441,20 @@ class JADNtoJSON(base.WriterBase):
         if field_type in self._customFields:
             return {"$ref": f"#/definitions/{self.formatStr(field_type)}"}
 
-        elif field_type in self._fieldMap:
+        if field_type in self._fieldMap:
             rtn = {"type": self.formatStr(self._fieldMap.get(field_type, field_type))}
             if field_type.lower() == "binary":
                 self._hasBinary = "Binary" not in self._customFields
                 rtn = {"$ref": f"#/definitions/Binary"}
             return rtn
 
-        elif ":" in field_type:
+        if ":" in field_type:
             src, attr = field_type.split(":", 1)
             if src in self._imports:
                 fmt = "" if self._imports[src].endswith(".json") else ".json"
                 return {"$ref": f"{self._imports[src]}{fmt}#/definitions/{attr}"}
 
-        elif re.match(r"^Enum\(.*?\)$", field_type):
+        if re.match(r"^Enum\(.*?\)$", field_type):
             f_type = self._schema.types.get(field_type[5:-1])
             if f_type.type in ("Array", "Choice", "Map", "Record"):
                 return {
@@ -474,10 +462,9 @@ class JADNtoJSON(base.WriterBase):
                     "description": f"Derived enumeration from {f_type.name}",
                     "enum": [f.name for f in f_type.get("fields", [])]
                 }
-            else:
-                print(f"Invalid derived enumeration - {f_type.name} should be a Array, Choice, Map or Record type")
+            raise exceptions.FormatError(f"Invalid derived enumeration - {f_type.name} should be a Array, Choice, Map or Record type")
 
-        elif re.match(r"^MapOf\(.*?\)$", field_type):
+        if re.match(r"^MapOf\(.*?\)$", field_type):
             print(f"Derived MapOf - {field_type}")
 
         print(f"unknown type: {field_type}")
@@ -539,7 +526,6 @@ class JADNtoJSON(base.WriterBase):
             rtn = {k: tmp[k] for k in self._schema_order if k in tmp}
             rtn.update({k: tmp[k] for k in tmp if k not in self._schema_order})
             return rtn
-        elif isinstance(itm, (list, tuple)):
+        if isinstance(itm, (list, tuple)):
             return [self._cleanEmpty(i) for i in itm]
-        else:
-            return itm
+        return itm

@@ -2,8 +2,6 @@
 JADN Exceptions
 """
 
-from builtins import Exception
-
 
 class SchemaException(Exception):
     """

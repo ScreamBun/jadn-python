@@ -8,17 +8,17 @@ import re
 
 from datetime import datetime
 
-from jadnschema.convert.schema.base import WriterBase
+from ... import base, enums
+from ..... import schema
+from .....schema import definitions
 
-from jadnschema import schema
 
-
-class JADNtoHTML(WriterBase):
+class JADNtoHTML(base.WriterBase):
     format = "html"
 
     _themeFile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "theme.css")  # Default theme
 
-    def dump(self, fname, source=None, comm=None, styles=None) -> None:
+    def dump(self, fname: str, source: str = None, comm: str = enums.CommentLevels.ALL, styles: str = None, **kwargs) -> None:  # pylint: disable=arguments-differ
         """
         Produce JSON schema from JADN schema and write to file provided
         :param fname: Name of file to write
@@ -30,9 +30,9 @@ class JADNtoHTML(WriterBase):
         with open(fname, "w") as f:
             if source:
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
-            f.write(self.dumps())
+            f.write(self.dumps(comm, styles=styles))
 
-    def dumps(self, comm=None, styles=None) -> str:
+    def dumps(self, comm: str = enums.CommentLevels.ALL, styles: str = None, **kwargs) -> str:  # pylint: disable=arguments-differ
         """
         Converts the JADN schema to HTML
         :param styles: CSS or Less styles to add to the HTML
@@ -69,7 +69,7 @@ class JADNtoHTML(WriterBase):
                 v = v.schema() if hasattr(v, "schema") else v
                 v = ", ".join([f"**{k1}**: {v1}" for k1, v1 in v.items()])
             elif isinstance(v, (list, tuple)):
-                v = ", ".join(["**{}**: {}".format(*i) for i in v] if type(v[0]) is list else v) if len(v) > 0 else "N/A"
+                v = ", ".join(["**{}**: {}".format(*i) for i in v] if isinstance(v[0], list) else v) if len(v) > 0 else "N/A"
             return f"<tr><td class=\"h\">{k}:</td><td class=\"s\">{v}</td></tr>"
 
         meta_rows = "".join([mkrow(meta, self._meta.get(meta, "")) for meta in self._meta_order])
@@ -111,7 +111,7 @@ class JADNtoHTML(WriterBase):
         return structure_html + primitives_html
 
     # Structure Formats
-    def _formatArray(self, itm, idx):
+    def _formatArray(self, itm: definitions.Array, idx):
         """
         Formats array for the given schema type
         :param itm: array to format
@@ -137,7 +137,7 @@ class JADNtoHTML(WriterBase):
 
         return array_html + array_table
 
-    def _formatArrayOf(self, itm, idx):
+    def _formatArrayOf(self, itm: definitions.ArrayOf, idx):
         """
         Formats arrayOf for the given schema type
         :param itm: arrayOf to format
@@ -156,7 +156,7 @@ class JADNtoHTML(WriterBase):
         arrayOf_html += options
         return arrayOf_html
 
-    def _formatChoice(self, itm, idx):
+    def _formatChoice(self, itm: definitions.Choice, idx):
         """
         Formats choice for the given schema type
         :param itm: choice to format
@@ -178,7 +178,7 @@ class JADNtoHTML(WriterBase):
 
         return choice_html + choice_table
 
-    def _formatEnumerated(self, itm, idx):
+    def _formatEnumerated(self, itm: definitions.Enumerated, idx):
         """
         Formats enum for the given schema type
         :param itm: enum to format
@@ -204,7 +204,7 @@ class JADNtoHTML(WriterBase):
 
         return enum_html + enum_table
 
-    def _formatMap(self, itm, idx):
+    def _formatMap(self, itm: definitions.Map, idx):
         """
         Formats map for the given schema type
         :param itm: map to format
@@ -230,7 +230,7 @@ class JADNtoHTML(WriterBase):
 
         return map_html + map_table
 
-    def _formatMapOf(self, itm, idx):
+    def _formatMapOf(self, itm: definitions.MapOf, idx):
         """
         Formats mapOf for the given schema type
         :param itm: mapOf to format
@@ -248,7 +248,7 @@ class JADNtoHTML(WriterBase):
         mapOf_html += options
         return mapOf_html
 
-    def _formatRecord(self, itm, idx):
+    def _formatRecord(self, itm: definitions.Record, idx):
         """
         Formats records for the given schema type
         :param itm: record to format
@@ -293,7 +293,7 @@ class JADNtoHTML(WriterBase):
         i = 0
         while i < len(tmp_format):
             line = tmp_format[i].strip()
-            tag = re.sub(r"\s*?<\/?(?P<tag>[\w]+)(\s|>).*$", "\g<tag>", str(line))
+            tag = re.sub(r"\s*?</?(?P<tag>[\w]+)(\s|>).*$", r"\g<tag>", str(line))
             indent = "\t" * len(nested_tags)
 
             if tag == "style":
@@ -304,7 +304,7 @@ class JADNtoHTML(WriterBase):
                     i += 1
                 else:
                     styles_indent = "\t" * (len(nested_tags) + 1)
-                    styles = re.sub(r"^(?P<start>.)", f"{styles_indent}\g<start>", str(styles_formatted), flags=re.M)
+                    styles = re.sub(r"^(?P<start>.)", fr"{styles_indent}\g<start>", str(styles_formatted), flags=re.M)
                     html_formatted += f"{indent}{line[:line.index('>')+1]}\n{styles}\n{indent}{line[line.rindex('<'):]}\n"
 
             elif re.match(rf"^<{tag}.*?<\/{tag}>$", str(line)):
@@ -332,8 +332,8 @@ class JADNtoHTML(WriterBase):
         :param css: CSS string to format
         :return: formatted CSS
         """
-        line_breaks = ("\*/", "{", "}", ";")
-        css_formatted = re.sub(rf"(?P<term>{'|'.join(line_breaks)})", "\g<term>\n", css)
+        line_breaks = ("\*/", "{", "}", ";")  # pylint: disable=anomalous-backslash-in-string
+        css_formatted = re.sub(rf"(?P<term>{'|'.join(line_breaks)})", r"\g<term>\n", css)
         css_formatted = css_formatted[:-1]
 
         return "\n".join(re.sub(r"\s{4}", "\t", line) for line in css_formatted.split("\n"))
@@ -347,17 +347,15 @@ class JADNtoHTML(WriterBase):
         if styles in ["", " ", None]:  # Check if theme exists
             return open(self._themeFile, "r").read() if os.path.isfile(self._themeFile) else ""
 
-        fname, ext = os.path.splitext(styles)
+        ext = os.path.splitext(styles)[1]
         if ext != ".css":  # Check valid theme format
             raise TypeError("Styles are not in css or less format")
 
         if os.path.isfile(styles):
             if ext == ".css":
                 return open(styles, "r").read()
-            else:
-                raise ValueError("The style format specified is an unknown format")
-        else:
-            raise IOError(f"The style file specified does not exist: {styles}")
+            raise ValueError("The style format specified is an unknown format")
+        raise IOError(f"The style file specified does not exist: {styles}")
 
     def _makeTable(self, headers: dict, rows: list, caption: str = ""):
         """

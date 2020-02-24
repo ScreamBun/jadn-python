@@ -9,9 +9,7 @@ from typing import (
     Union
 )
 
-from . import (
-    schema as jadn_schema
-)
+from . import schema as jadn_schema
 
 
 def check_schema(schema: Union[dict, str]) -> jadn_schema.Schema:
@@ -83,23 +81,23 @@ def load(fname: Union[str, BufferedIOBase, TextIOBase]) -> jadn_schema.Schema:
     return schema_obj
 
 
-def dumps(schema: Union[dict, jadn_schema.Schema], indent: int = 2, strip: bool = False) -> str:
+def dumps(schema: Union[dict, jadn_schema.Schema], indent: int = 2, comments: bool = False) -> str:
     """
     Properly format a JADN schema
     :param schema: Schema to format
     :param indent: spaces to indent
-    :param strip: strip comments from schema
+    :param comments: strip comments from schema
     :return: Formatted JADN schema
     """
-    return jadn_schema.Schema(schema).dumps(indent, strip)
+    return jadn_schema.Schema(schema).dumps(indent, comments)
 
 
-def dump(schema: dict, fname: Union[str, BufferedIOBase, TextIOBase], indent: int = 2, strip: bool = False) -> None:
+def dump(schema: dict, fname: Union[str, BufferedIOBase, TextIOBase], indent: int = 2, comments: bool = False) -> None:
     """
     Write the JADN to a file
     :param schema: schema to write
     :param fname: file to write to
     :param indent: spaces to indent
-    :param strip: strip comments from schema
+    :param comments: strip comments from schema
     """
-    return jadn_schema.Schema(schema).dump(fname, indent, strip)
+    return jadn_schema.Schema(schema).dump(fname, indent, comments)

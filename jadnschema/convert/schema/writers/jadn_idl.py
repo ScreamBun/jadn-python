@@ -7,21 +7,17 @@ import re
 from beautifultable import BeautifulTable
 from datetime import datetime
 
-from jadnschema.schema import (
-    definitions,
-    fields
-)
-
 from typing import (
     Any,
     Dict,
     List
 )
 
-from ..base import WriterBase
+from .. import base, enums
+from ....schema import definitions, fields
 
 
-class JADNtoIDL(WriterBase):
+class JADNtoIDL(base.WriterBase):
     format = "jidl"
 
     _alignment: Dict[str, str] = {
@@ -30,7 +26,7 @@ class JADNtoIDL(WriterBase):
         ">": BeautifulTable.ALIGN_RIGHT
     }
 
-    def dump(self, fname: str, source: str = None, comm: str = None) -> None:
+    def dump(self, fname: str, source: str = None, comm: str = enums.CommentLevels.ALL, **kwargs) -> None:
         """
         Produce JSON schema from JADN schema and write to file provided
         :param fname: Name of file to write
@@ -43,7 +39,7 @@ class JADNtoIDL(WriterBase):
                 f.write(f"/* Generated from {source}, {datetime.ctime(datetime.now())}*/\n")
             f.write(self.dumps())
 
-    def dumps(self, comm: str = None) -> str:
+    def dumps(self, comm: str = enums.CommentLevels.ALL, **kwargs) -> str:
         """
         Converts the JADN schema to JSON
         :param comm: Level of comments to include in converted schema, ignored
@@ -66,7 +62,7 @@ class JADNtoIDL(WriterBase):
         def val(v):
             if hasattr(v, "schema"):
                 return json.dumps(v.schema())
-            elif not isinstance(v, (str, int, float)):
+            if not isinstance(v, (str, int, float)):
                 return json.dumps(v)
             return v
 
@@ -83,7 +79,7 @@ class JADNtoIDL(WriterBase):
         fmt = f" /{itm.options.format}" if hasattr(itm.options, "format") else ""
         array_idl = f"{itm.name} = Array{fmt} {{"
 
-        fields = []
+        itm_fields = []
         for idx, field in enumerate(itm.fields):
             field_type = f"{field.type}"
             if field.type == "ArrayOf":
@@ -97,21 +93,21 @@ class JADNtoIDL(WriterBase):
             cont = ',' if idx + 1 != len(itm.fields) else ''
             field.description = field.description[:-1] if field.description.endswith(".") else field.description
 
-            fields.append([
+            itm_fields.append([
                 field.id,
                 f"{field_type}{array}{fmt}{'' if array else opt}{cont}",
                 f"// {field.name}:: {field.description}" if field.description else ""
             ])
-        fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
+        itm_fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(itm_fields)).split("\n"))
 
         if itm.description:
-            idx = fields.find("//") + 3
+            idx = itm_fields.find("//") + 3
             if idx > len(array_idl):
                 array_idl += " " * (idx - len(array_idl)) + f"// {itm.description}"
             else:
                 array_idl += f"  // {itm.description}"
 
-        array_idl += f"\n{fields}"
+        array_idl += f"\n{itm_fields}"
         return f"{array_idl}\n}}\n"
 
     def _formatArrayOf(self, itm: definitions.ArrayOf) -> str:
@@ -129,16 +125,16 @@ class JADNtoIDL(WriterBase):
         :return: formatted choice
         """
         choice_idl = f"{itm.name} = Choice {{"
-        fields = self._makeFields(itm.fields)
+        itm_fields = self._makeFields(itm.fields)
 
         if itm.description:
-            idx = fields.find("//") + 3
+            idx = itm_fields.find("//") + 3
             if idx > len(choice_idl):
                 choice_idl += " " * (idx - len(choice_idl)) + f"// {itm.description}"
             else:
                 choice_idl += f"  // {itm.description}"
 
-        choice_idl += f"\n{fields}"
+        choice_idl += f"\n{itm_fields}"
         return f"{choice_idl}\n}}\n"
 
     def _formatEnumerated(self, itm: definitions.Enumerated) -> str:
@@ -149,23 +145,23 @@ class JADNtoIDL(WriterBase):
         """
         enum_id = hasattr(itm.options, "id")
         enumerated_idl = f"{itm.name} = Enumerated{'.ID' if enum_id else ''} {{"
-        fields = []
+        itm_fields = []
         for i, f in enumerate(itm.fields):
             f.description = f.description[:-1] if f.description.endswith(".") else f.description
             if enum_id:
-                fields.append([f.id, f"// {f.value}:: {f.description}"])
+                itm_fields.append([f.id, f"// {f.value}:: {f.description}"])
             else:
-                fields.append([f.id, f"{f.value}{',' if i + 1 != len(itm.fields) else ''}", f"// {f.description}"])
+                itm_fields.append([f.id, f"{f.value}{',' if i + 1 != len(itm.fields) else ''}", f"// {f.description}"])
 
-        fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(fields)).split("\n"))
+        itm_fields = "\n".join(f"\t{r}" for r in re.sub(r"\t", " " * 4, self._makeTable(itm_fields)).split("\n"))
         if itm.description:
-            idx = fields.find("//") + 3
+            idx = itm_fields.find("//") + 3
             if idx > len(enumerated_idl):
                 enumerated_idl += " " * (idx - len(enumerated_idl)) + f"// {itm.description}"
             else:
                 enumerated_idl += f"  // {itm.description}"
 
-        enumerated_idl += f"\n{fields}"
+        enumerated_idl += f"\n{itm_fields}"
         return f"{enumerated_idl}\n}}\n"
 
     def _formatMap(self, itm: definitions.Map) -> str:
@@ -180,16 +176,16 @@ class JADNtoIDL(WriterBase):
             map_idl += f"{{{multi}}}"
 
         map_idl += " {"
-        fields = self._makeFields(itm.fields)
+        itm_fields = self._makeFields(itm.fields)
 
         if itm.description:
-            idx = fields.find("//") + 3
+            idx = itm_fields.find("//") + 3
             if idx > len(map_idl):
                 map_idl += " " * (idx - len(map_idl)) + f"// {itm.description}"
             else:
                 map_idl += f"  // {itm.description}"
 
-        map_idl += f"\n{fields}"
+        map_idl += f"\n{itm_fields}"
         return f"{map_idl}\n}}\n"
 
     def _formatMapOf(self, itm: definitions.MapOf) -> str:
@@ -212,19 +208,19 @@ class JADNtoIDL(WriterBase):
             record_idl += f"{{{multi}}}"
 
         record_idl += " {"
-        fields = self._makeFields(itm.fields)
+        itm_fields = self._makeFields(itm.fields)
 
         if itm.description:
-            idx = fields.find("//") + 3
+            idx = itm_fields.find("//") + 3
             if idx > len(record_idl):
                 record_idl += " " * (idx - len(record_idl)) + f"// {itm.description}"
             else:
                 record_idl += f"  // {itm.description}"
 
-        record_idl += f"\n{fields}"
+        record_idl += f"\n{itm_fields}"
         return f"{record_idl}\n}}\n"
 
-    def _formatCustom(self, itm: definitions.Definition) -> str:
+    def _formatCustom(self, itm: definitions.CustomDefinition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -250,9 +246,9 @@ class JADNtoIDL(WriterBase):
         return f"{itm.name} = {itmType}{'  // '+itm.description if itm.description else ''}\n"
 
     # Helper Functions
-    def _makeFields(self, fields: List[fields.Field]) -> str:
+    def _makeFields(self, itm_fields: List[fields.Field]) -> str:
         tmp_fields = []
-        for idx, field in enumerate(fields):
+        for idx, field in enumerate(itm_fields):
             field_type = f"{field.type}"
             if field.type == "ArrayOf":
                 field_type += f"({field.options.get('vtype', 'String')})"
@@ -271,7 +267,7 @@ class JADNtoIDL(WriterBase):
             pattern = f"(%{field.options.pattern}%)" if hasattr(field.options, "pattern") else ""
             opt = " optional" if self._is_optional(field.options) else ""
             unq = " unique" if getattr(field.options, "unique", False) else ""
-            cont = ',' if idx + 1 != len(fields) else ''
+            cont = ',' if idx + 1 != len(itm_fields) else ''
             field.description = field.description[:-1] if field.description.endswith(".") else field.description
 
             tmp_fields.append([

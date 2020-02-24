@@ -26,7 +26,7 @@ else:
     @utils.addKey(d=IDNA_Formats, k="idn-hostname")
     def idn_hostname(val: str) -> Optional[Exception]:
         """
-        Validate an IDN Hostname - RFC 5890 Section 2.3.2.3
+        Validate an IDN Hostname - RFC 5890 § 2.3.2.3
         :param val: IDN Hostname to validate
         :return: None or Exception
         """

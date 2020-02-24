@@ -26,19 +26,19 @@ except ImportError:
 
 serializations = FrozenDict(
     encode=FrozenDict(
-        bson=lambda v: bson.dumps(v),
-        cbor=lambda v: cbor2.dumps(v),
-        json=lambda v: json.dumps(v),
+        bson=bson.dumps,
+        cbor=cbor2.dumps,
+        json=json.dumps,
         msgpack=lambda v: msgpack.packb(v, use_bin_type=True),
-        xml=lambda v: encode_xml(v),
+        xml=encode_xml,
         yaml=lambda v: yaml.dump(v, Dumper=Dumper),
     ),
     decode=FrozenDict(
         bson=lambda v: bson.loads(v if isinstance(v, bytes) else v.encode()),
         cbor=lambda v: cbor2.loads(v if isinstance(v, bytes) else v.encode()),
-        json=lambda v: json.loads(v),
+        json=json.loads,
         msgpack=lambda v: msgpack.unpackb(v if isinstance(v, bytes) else v.encode(), raw=False),
-        xml=lambda v: decode_xml(v),
+        xml=decode_xml,
         yaml=lambda v: yaml.load(v, Loader=Loader),
     )
 )

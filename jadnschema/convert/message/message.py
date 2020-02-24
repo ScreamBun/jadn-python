@@ -10,7 +10,7 @@ from ...utils import FrozenDict
 MessageFormats = FrozenDict({s.upper(): s for s in {*serializations.encode}.union({**serializations.decode})})
 
 
-class Message(object):
+class Message:
     """
     Load and dump a message to other formats
     """

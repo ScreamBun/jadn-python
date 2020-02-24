@@ -20,7 +20,7 @@ NetworkFormats = {}
 @utils.addKey(d=NetworkFormats)
 def hostname(val: str) -> Optional[Exception]:
     """
-    Check if valid Hostname - RFC 1034 Section 3.1
+    Check if valid Hostname - RFC 1034 § 3.1
     :param val: Hostname to validate
     :return: given hostname
     :raises: TypeError, ValueError
@@ -44,7 +44,7 @@ def hostname(val: str) -> Optional[Exception]:
 @utils.addKey(d=NetworkFormats, k="ipv4")
 def IPv4(val: str) -> Optional[Exception]:
     """
-    RFC 2673 Section 3.2# "dotted-quad"
+    RFC 2673 § 3.2# "dotted-quad"
     :param val: IPv6 Address to validate
     :return: None or Exception
     """
@@ -61,7 +61,7 @@ def IPv4(val: str) -> Optional[Exception]:
 @utils.addKey(d=NetworkFormats, k="ipv6")
 def IPv6(val: str) -> Optional[Exception]:
     """
-    RFC 4291 Section 2.2 "IPv6 address"
+    RFC 4291 § 2.2 "IPv6 address"
     :param val: IPv6 Address to validate
     :return: None or Exception
     """
@@ -94,37 +94,34 @@ else:
             netaddr.EUI(val)
         except (netaddr.core.AddrFormatError, ValueError) as e:
             return e
-        return
 
 
 # How to validate??
 @utils.addKey(d=NetworkFormats, k="ipv4-addr")
 def IPv4_Address(val: str) -> Optional[Exception]:
     """
-    IPv4 address as specified in RFC 791 Section 3.1
+    IPv4 address as specified in RFC 791 § 3.1
     :param val: IPv4 Address to validate
     :return: None or Exception
     """
     # Convert val to bytes
-    pass
 
 
 # How to validate??
 @utils.addKey(d=NetworkFormats, k="ipv6-addr")
 def IPv6_Address(val: str) -> Optional[Exception]:
     """
-    IPv6 address as specified in RFC 8200 Section 3
+    IPv6 address as specified in RFC 8200 § 3
     :param val: IPv4 Address to validate
     :return: None or Exception
     """
     # Convert val to bytes
-    pass
 
 
 @utils.addKey(d=NetworkFormats, k="ipv4-net")
 def IPv4_Network(val: Union[list, str, tuple]) -> Optional[Exception]:
     """
-    Binary IPv4 address and Integer prefix length as specified in RFC 4632 Section 3.1
+    Binary IPv4 address and Integer prefix length as specified in RFC 4632 § 3.1
     :param val: IPv4 network address to validate
     :return: None or exception
     """
@@ -134,7 +131,8 @@ def IPv4_Network(val: Union[list, str, tuple]) -> Optional[Exception]:
     val = val if isinstance(val, (list, tuple)) else val.split("/")
     if len(val) == 1:
         return IPv4(val[0])
-    elif len(val) != 2:
+
+    if len(val) != 2:
         return ValueError(f"IPv6 Network is not 2 values, given {len(val)}")
 
     val = "/".join(map(str, val))
@@ -147,7 +145,7 @@ def IPv4_Network(val: Union[list, str, tuple]) -> Optional[Exception]:
 @utils.addKey(d=NetworkFormats, k="ipv6-net")
 def IPv6_Network(val: Union[list, str, tuple]) -> Optional[Exception]:
     """
-    Binary IPv6 address and Integer prefix length as specified in RFC 4291 Section 2.3
+    Binary IPv6 address and Integer prefix length as specified in RFC 4291 § 2.3
     :param val: IPv6 network address to validate
     :return: None or exception
     """
@@ -157,7 +155,8 @@ def IPv6_Network(val: Union[list, str, tuple]) -> Optional[Exception]:
     val = val if isinstance(val, (list, tuple)) else val.split("/")
     if len(val) == 1:
         return IPv6(val[0])
-    elif len(val) != 2:
+
+    if len(val) != 2:
         return ValueError(f"IPv6 Network is not 2 values, given {len(val)}")
 
     val = "/".join(map(str, val))

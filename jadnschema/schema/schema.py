@@ -8,10 +8,7 @@ import numbers
 import os
 import re
 
-from io import (
-    BufferedIOBase,
-    TextIOBase
-)
+from io import BufferedIOBase, TextIOBase
 from typing import (
     Any,
     Callable,
@@ -24,13 +21,10 @@ from typing import (
 )
 
 from .base import BaseModel
-from .definitions import Definition
-from .exceptions import (
-    FormatError,
-    ValidationError
-)
+from .definitions import DefinitionBase
 from .formats import ValidationFormats
 from .options import Options
+from ..exceptions import FormatError, ValidationError
 
 
 class Config(BaseModel):
@@ -59,7 +53,8 @@ class Config(BaseModel):
     __slots__ = ("MaxBinary", "MaxString", "MaxElements", "FS", "Sys", "TypeName", "FieldName", "NSID")
 
     def __init__(self, data: Union[dict, "Config"] = None, **kwargs):
-        data = {re.sub(r"^\$", "", k): v for k, v in (data.items() if data else {})}
+        data = data.items() if data else {}
+        data = {re.sub(r"^\$", "", k): v for k, v in data}
         self._overrides = tuple(data.keys()) if data else ()
         super(Config, self).__init__(data, **kwargs)
 
@@ -166,10 +161,10 @@ class Meta(BaseModel):
 
 class Schema(BaseModel):
     meta: Meta
-    types: Dict[str, Definition]
+    types: Dict[str, DefinitionBase]
 
     # Helper vars
-    _derived: Dict[str, Definition]
+    _derived: Dict[str, DefinitionBase]
     _formats: Dict[str, Callable]
     _definition_order: Tuple[str] = ("OpenC2-Command", "OpenC2-Response", "Action", "Target", "Actuator", "Args",
                                      "Status-Code", "Results", "Artifact", "Device", "Domain-Name", "Email-Addr",
@@ -226,7 +221,7 @@ class Schema(BaseModel):
         Determine the dependencies for each type within the schema
         :return: dictionary of dependencies
         """
-        nsids = [n for n in self.meta.get("imports", {}).keys()]
+        nsids = list(self.meta.get("imports", {}).keys())
         type_deps = {imp: set() for imp in nsids}
 
         def ns(name: str) -> str:
@@ -279,17 +274,14 @@ class Schema(BaseModel):
         :param simple: return a simple type (dict) instead of an object (Schema)
         :return: simplified schema
         """
-        config = self.meta.config
-        p = inflect.engine()
-
-        def remove_anonymous_type(schema: dict) -> dict:
-            for type_def in list(schema.get("types", [])):
+        def remove_anonymous_type(sch: dict) -> dict:
+            for type_def in list(sch.get("types", [])):
                 for field_def in type_def.get("fields", []):
                     if "options" in field_def:
                         field_opts, type_opts = field_def["options"].split()
                         if type_opts.dict():
-                            new_name = f"{field_def['type']}{config.Sys}{field_def['name']}".replace("_", "-")
-                            schema["types"].append({
+                            new_name = f"{field_def['type']}{self.meta.config.Sys}{field_def['name']}".replace("_", "-")
+                            sch["types"].append({
                                 "name": new_name,
                                 "type": field_def["type"],
                                 "options": type_opts,
@@ -299,11 +291,11 @@ class Schema(BaseModel):
                                 type=new_name,
                                 options=field_opts
                             )
+            return sch
 
-            return schema
-
-        def remove_multiplicity(schema: dict) -> dict:
-            for type_def in schema.get("types", []):
+        def remove_multiplicity(sch: dict) -> dict:
+            p = inflect.engine()
+            for type_def in sch.get("types", []):
                 for field_def in type_def.get("fields", []):
                     if "options" in field_def:
                         field_opts, type_opts = field_def["options"].split()
@@ -320,9 +312,8 @@ class Schema(BaseModel):
                             new_name = field_def['name'].split("_")
                             new_name[-1] = p.plural(new_name[-1]) if p.get_count(new_name[-1]) == 1 else new_name[-1]
                             new_name = "-".join(map(str.capitalize, new_name))
-                            # new_name = f"{field_def['type']}{config.Sys}{field_def['name']}".replace("_", "-")
-                            if not [t for t in schema.get("types", []) if t["name"] == new_name]:
-                                schema["types"].append({
+                            if not [t for t in sch.get("types", []) if t["name"] == new_name]:
+                                sch["types"].append({
                                     "name": new_name,
                                     "type": "ArrayOf",
                                     "options": type_opts,
@@ -333,29 +324,29 @@ class Schema(BaseModel):
                                 options=field_opts
                             )
 
-            return schema
+            return sch
 
-        def remove_derived_enum(schema: dict) -> dict:
+        def remove_derived_enum(sch: dict) -> dict:
             opt_checks = {
                 "enum": lambda v: True,
                 "ktype": lambda v: v.startswith(Options.enum_id),
                 "vtype": lambda v: v.startswith(Options.enum_id)
             }
 
-            for type_def in schema.get("types", []):
+            for type_def in sch.get("types", []):
                 if type_def["type"] in ("ArrayOf", "Enumerated", "MapOf"):
                     for opt_name, opt_check in opt_checks.items():
                         opt = type_def["options"].get(opt_name, None)
                         if opt and opt_check(opt):
                             opt = opt[1:] if opt.startswith(Options.enum_id) else opt
-                            orig_type = [t for t in schema.get("types", []) if t["name"] == opt]
+                            orig_type = [t for t in sch.get("types", []) if t["name"] == opt]
                             if len(orig_type) != 1:
                                 raise TypeError(f"Type of {opt} does not exist within the schema")
 
                             orig_type = orig_type[0]
-                            new_name = f"{opt}{config.Sys}Enum".replace("_", "-")
-                            if not [t for t in schema.get("types", []) if t["name"] == new_name]:
-                                schema["types"].append({
+                            new_name = f"{opt}{self.meta.config.Sys}Enum".replace("_", "-")
+                            if not [t for t in sch.get("types", []) if t["name"] == new_name]:
+                                sch["types"].append({
                                     "name": new_name,
                                     "type": "Enumerated",
                                     "options": Options(),
@@ -363,13 +354,12 @@ class Schema(BaseModel):
                                     "fields": [{"id": f["id"], "value": f["name"], "description": f["description"]} for f in orig_type.get("fields", [])]
                                 })
                             setattr(type_def["options"], opt_name, new_name)
+            return sch
 
-            return schema
-
-        def remove_map_of_enum(schema: dict) -> dict:
-            for idx, type_def in enumerate(schema.get("types", [])):
+        def remove_map_of_enum(sch: dict) -> dict:
+            for idx, type_def in enumerate(sch.get("types", [])):
                 if type_def["type"] == "MapOf":
-                    key_type = [t for t in schema.get("types", []) if t["name"] == type_def["options"].ktype]
+                    key_type = [t for t in sch.get("types", []) if t["name"] == type_def["options"].ktype]
                     value_type = type_def["options"].vtype
                     if len(key_type) != 1:
                         raise TypeError(f"Type of {type_def['options'].ktype} does not exist within the schema")
@@ -377,15 +367,14 @@ class Schema(BaseModel):
                     if key_type["type"] == "Enumerated":
                         delattr(type_def["options"], "ktype")
                         delattr(type_def["options"], "vtype")
-                        schema["types"][idx] = {
+                        sch["types"][idx] = {
                             "name": type_def["name"],
                             "type": "Map",
                             "options": type_def["options"],
                             "description": type_def["description"],
                             "fields": [dict(id=f["id"], name=f["value"], type=value_type, options=Options(), description=f["description"]) for f in key_type.get("fields", [])]
                         }
-
-            return schema
+            return sch
 
         schema = (schema if isinstance(schema, dict) else schema.schema()) if schema else self.schema()
         simple_schema = self._convert_types(schema)
@@ -472,8 +461,7 @@ class Schema(BaseModel):
             err = FormatError("Schema not properly defined")
             if silent:
                 return [err]
-            else:
-                raise err
+            raise err
 
         for type_name, type_def in self.types.items():
             if type_def.type not in self._schema_types:
@@ -485,8 +473,7 @@ class Schema(BaseModel):
         if len(errors) > 0:
             if silent:
                 return errors
-            else:
-                raise errors[0]
+            raise errors[0]
 
     def validate(self, inst: dict, silent: bool = True) -> Optional[Exception]:
         for exp in self.meta.exports:
@@ -497,8 +484,7 @@ class Schema(BaseModel):
         err = ValidationError(f"instance not valid as under the current schema")
         if silent:
             return err
-        else:
-            raise err
+        raise err
 
     def validate_as(self, inst: dict, _type: str, silent: bool = True) -> Optional[List[Exception]]:
         errors = []
@@ -512,7 +498,7 @@ class Schema(BaseModel):
         errors = list(filter(None, errors))
         if silent and errors:
             return errors
-        elif not silent and errors:
+        if not silent and errors:
             raise errors[0]
 
     # Helper Functions
@@ -552,7 +538,7 @@ class Schema(BaseModel):
             lines = f",\n".join(f"{ind}\"{k}\": {self._dumps(schema[k], indent, _level+1)}" for k in schema)
             return f"{{\n{lines}\n{ind_e}}}"
 
-        elif isinstance(schema, (list, tuple)):
+        if isinstance(schema, (list, tuple)):
             nested = schema and isinstance(schema[0], (list, tuple))
             lvl = _level+1 if nested and isinstance(schema[-1], (list, tuple)) else _level
             lines = [self._dumps(val, indent, lvl) for val in schema]
@@ -560,10 +546,10 @@ class Schema(BaseModel):
                 return f"[\n{ind}" + f",\n{ind}".join(lines) + f"\n{ind_e}]"
             return f"[{', '.join(lines)}]"
 
-        elif isinstance(schema, (numbers.Number, str)):
+        if isinstance(schema, (numbers.Number, str)):
             return json.dumps(schema)
-        else:
-            return "???"
+
+        return "???"
 
     def addFormat(self, fmt: str, fun: Callable[[Any], Optional[List[Exception]]], override: bool = False) -> None:
         """
@@ -625,6 +611,3 @@ class Schema(BaseModel):
                 raise TypeError("Schema types improperly formatted")
 
         return schema
-
-
-

@@ -3,10 +3,7 @@ JADN RFC3987 Formats
 """
 from typing import Optional
 
-from ... import (
-    exceptions,
-    utils
-)
+from ... import utils
 
 RFC3987_Formats = {}
 
@@ -28,7 +25,8 @@ else:
 
         try:
             rfc3987.parse(val, rule="IRI")
-        except exceptions as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # TODO: change to better exception
             return e
 
 
@@ -44,7 +42,8 @@ else:
 
         try:
             rfc3987.parse(val, rule="IRI_reference")
-        except exceptions as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # TODO: change to better exception
             return e
 
 __all__ = ["RFC3987_Formats"]

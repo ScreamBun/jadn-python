@@ -30,7 +30,7 @@ registered = utils.FrozenDict(
 
 def register(rw: str, fmt: Union[str, Callable] = None, override: bool = False):
     def wrapper(cls: Callable, fmt: str = fmt, override: bool = override):
-        global registered
+        global registered  # pylint: disable=global-statement
         registered = utils.toThawed(registered)
 
         regCls = registered[rw].get(fmt, None)
@@ -51,7 +51,7 @@ register_reader = partial(register, "readers")
 register_writer = partial(register, "writers")
 
 
-class ReaderBase(object):
+class ReaderBase:
     """
     Base Schema Loader
     """
@@ -85,10 +85,10 @@ class ReaderBase(object):
         return self.parse(schema)
 
     def parse(self, schema: Union[bytes, str]) -> jadn_schema.Schema:
-        raise NotImplemented(f"{self.__class__.__name__} does not implement `parse` as a class function")
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement `parse` as a class function")
 
 
-class WriterBase(object):
+class WriterBase:
     """
     Base JADN Converter
     """
@@ -136,14 +136,14 @@ class WriterBase(object):
         self._types = self._schema.types.values()
         self._customFields = {k: v.type for k, v in self._schema.types.items()}
 
-    def dump(self, *args, **kwargs):
-        raise NotImplemented(f"{self.__class__.__name__} does not implement `dump` as a class function")
+    def dump(self, fname: str, source: str = None, comm: str = enums.CommentLevels.ALL, **kwargs):
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement `dump` as a class function")
 
-    def dumps(self, *args, **kwargs) -> None:
-        raise NotImplemented(f"{self.__class__.__name__} does not implement `dumps` as a class function")
+    def dumps(self, comm: str = enums.CommentLevels.ALL, **kwargs) -> None:
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement `dumps` as a class function")
 
     # Helper Functions
-    def _makeStructures(self, default: Any = None, *args, **kwargs) -> Dict[str, Union[dict, str]]:
+    def _makeStructures(self, default: Any = None, **kwargs) -> Dict[str, Union[dict, str]]:
         """
         Create the type definitions for the schema
         :return: type definitions for the schema
@@ -152,7 +152,7 @@ class WriterBase(object):
         structs = {}
         for t in self._types:
             df = getattr(self, f"_format{t.type if t.is_structure() else 'Custom'}", None)
-            structs[t.name] = df(t, *args, **kwargs) if df else default
+            structs[t.name] = df(t, **kwargs) if df else default
 
         return structs
 
@@ -169,7 +169,7 @@ class WriterBase(object):
         escape_chars = list(filter(None, self.escape_chars))
         if s == "*":
             return "unknown"
-        elif len(escape_chars) > 0:
+        if len(escape_chars) > 0:
             return re.compile(rf"[{''.join(escape_chars)}]").sub('_', s)
         return s
 

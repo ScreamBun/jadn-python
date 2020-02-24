@@ -1,23 +1,14 @@
 import importlib
 
 from functools import partial
-
 from typing import Union
 
-from .base import (
-    register_reader,
-    register_writer
-)
-
-from . import (
-    enums,
-    readers,
-    writers
-)
+from .base import register_reader, register_writer
+from . import enums, readers, writers
 
 
 # Base Functions
-def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
+def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, **kwargs):
     """
     Produce formatted schema from JADN schema
     :param schema: JADN Schema to convert
@@ -27,16 +18,16 @@ def dump(schema: Union[str, dict], fname: str, source: str = "", comm: str = enu
     :param fmt: format of the desired output schema
     :return: None
     """
-    writers = importlib.import_module(".base", __package__).registered.writers
-    cls = writers.get(fmt, None)
+    registered_writers = importlib.import_module(".base", __package__).registered.writers
+    cls = registered_writers.get(fmt, None)
     if cls:
         comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
-        return cls(schema).dump(fname, source, comm, *args, **kwargs)
+        return cls(schema).dump(fname, source, comm, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
+def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: str = enums.SchemaFormats.JADN, **kwargs):
     """
     Produce formatted schema from JADN schema
     :param schema: JADN Schema to convert
@@ -44,16 +35,16 @@ def dumps(schema: Union[str, dict], comm: str = enums.CommentLevels.ALL, fmt: st
     :param fmt: format of the desired output schema
     :return: formatted schema
     """
-    writers = importlib.import_module(".base", __package__).registered.writers
-    cls = writers.get(fmt, None)
+    registered_writers = importlib.import_module(".base", __package__).registered.writers
+    cls = registered_writers.get(fmt, None)
     if cls:
         comm = comm if comm in enums.CommentLevels.values() else enums.CommentLevels.ALL
-        return cls(schema).dumps(comm, *args, **kwargs)
+        return cls(schema).dumps(comm, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
+def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaFormats.JADN, **kwargs):
     """
     Produce JADN schema from input schema
     :param schema: Schema to convert
@@ -61,25 +52,25 @@ def load(schema: Union[str, dict], source: str = "", fmt: str = enums.SchemaForm
     :param fmt: format of the input schema
     :return: loaded JADN schema
     """
-    readers = importlib.import_module(".base", __package__).registered.readers
-    cls = readers.get(fmt, None)
+    registered_readers = importlib.import_module(".base", __package__).registered.readers
+    cls = registered_readers.get(fmt, None)
     if cls:
-        return cls().load(schema, source, *args, **kwargs)
+        return cls().load(schema, source, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 
 
-def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN, *args, **kwargs):
+def loads(schema: Union[str, dict], fmt: str = enums.SchemaFormats.JADN, **kwargs):
     """
     Produce JADN schema from input schema
     :param schema: schema file to convert
     :param fmt: format of the input schema
     :return: loaded JADN schema
     """
-    readers = importlib.import_module(".base", __package__).registered.readers
-    cls = readers.get(fmt, None)
+    registered_readers = importlib.import_module(".base", __package__).registered.readers
+    cls = registered_readers.get(fmt, None)
     if cls:
-        return cls().loads(schema, *args, **kwargs)
+        return cls().loads(schema, **kwargs)
 
     raise ReferenceError(f"The format specified is not a known format - {fmt}")
 

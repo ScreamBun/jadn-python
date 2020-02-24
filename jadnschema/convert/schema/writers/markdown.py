@@ -1,8 +1,6 @@
 """
 JADN to Markdown tables
 """
-import json
-
 from beautifultable import BeautifulTable
 from datetime import datetime
 from typing import (
@@ -10,19 +8,12 @@ from typing import (
     Dict,
     Union
 )
-from jadnschema.schema import (
-    definitions,
-    fields
-)
 
-from ..base import WriterBase
-
-from .... import (
-    schema
-)
+from .. import base, enums
+from ....schema import definitions, fields, Options
 
 
-class JADNtoMD(WriterBase):
+class JADNtoMD(base.WriterBase):
     format = "md"
 
     _alignment: Dict[str, Callable[[str], str]] = {
@@ -31,7 +22,7 @@ class JADNtoMD(WriterBase):
         ">": lambda a: f"{a[:-1]}:",
     }
 
-    def dump(self, fname: str, source: str = None, comm: str = None) -> None:
+    def dump(self, fname: str, source: str = None, comm: str = enums.CommentLevels.ALL, **kwargs) -> None:
         """
         Convert the given JADN schema to MarkDown Tables
         :param fname: Name of file to write
@@ -44,7 +35,7 @@ class JADNtoMD(WriterBase):
                 f.write(f"<!-- Generated from {source}, {datetime.ctime(datetime.now())} -->\n")
             f.write(self.dumps())
 
-    def dumps(self, comm: str = None) -> str:
+    def dumps(self, comm: str = enums.CommentLevels.ALL, **kwargs) -> str:
         """
         Convert the given JADN schema to MarkDown Tables
         :param comm: Level of comments to include in converted schema, ignored
@@ -143,24 +134,24 @@ class JADNtoMD(WriterBase):
         fmt = ".ID" if hasattr(itm.options, "id") else ""
         enumerated_md = f"**_Type: {itm.name} (Enumerated{fmt})_**\n\n"
 
-        fields = []
+        itm_fields = []
         for f in itm.fields:
             f.description = f.description[:-1] if f.description.endswith(".") else f.description
-            fields.append(f)
+            itm_fields.append(f)
 
         if hasattr(itm.options, "id"):
             headers = {
                 'ID': {'align': '>'},
                 'Description': {}
             }
-            rows = [{"ID": f.id, "Description": f"**{f.value}**::{f.description}"} for f in fields]
+            rows = [{"ID": f.id, "Description": f"**{f.value}**::{f.description}"} for f in itm_fields]
         else:
             headers = {
                 'ID': {'align': '>'},
                 'Name': {},
                 'Description': {}
             }
-            rows = fields
+            rows = itm_fields
         enumerated_md += self._makeTable(headers, rows)
         return enumerated_md
 
@@ -218,7 +209,7 @@ class JADNtoMD(WriterBase):
         record_md += self._makeTable(headers, rows)
         return record_md
 
-    def _formatCustom(self, itm: definitions.Definition) -> str:
+    def _formatCustom(self, itm: definitions.CustomDefinition) -> str:
         """
         Formats custom type for the given schema type
         :param itm: custom type to format
@@ -241,7 +232,7 @@ class JADNtoMD(WriterBase):
         return custom_md
 
     # Helper Functions
-    def _makeField(self, field: Union[definitions.Definition, fields.Field]) -> Dict:
+    def _makeField(self, field: Union[definitions.DefinitionBase, fields.Field]) -> Dict:
         field_dict = field.dict()
         if field.type == "MapOf":
             field_dict['type'] += f"({field.options.get('ktype', 'String')}, {field.options.get('vtype', 'String')})"
@@ -286,7 +277,7 @@ class JADNtoMD(WriterBase):
                         cell = list(filter(None, [row.get(c, None) for c in column]))
                         cell = cell[0] if len(cell) == 1 else ''
 
-                    if column == "options" and isinstance(cell, schema.Options):
+                    if column == "options" and isinstance(cell, Options):
                         cell = cell.multiplicity(1, 1, True)
                         # TODO: More options
 

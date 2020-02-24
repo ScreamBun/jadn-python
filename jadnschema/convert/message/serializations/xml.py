@@ -7,9 +7,7 @@ import xmltodict
 
 from typing import Union
 
-from ....utils import (
-    check_values
-)
+from ....utils import check_values
 
 
 def _xml_root(msg: dict) -> Union[dict, str]:

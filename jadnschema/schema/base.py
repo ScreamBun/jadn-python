@@ -17,47 +17,44 @@ from typing import (
 
 ModelData = Union[dict, list, "BaseModel"]
 
-'''
-class MetaModel(ABCMeta):
-    def __new__(mcs, name, bases, namespace):
-        fields: Dict[str, ModelData] = {}
-        validators: Dict[str, Callable] = {}
 
-        new_namespace = {
-            '__config__': None,
-            '__fields__': fields,
-
-            **{n: v for n, v in namespace.items() if n not in fields}
-        }
-        print(f"namespace - {new_namespace.keys()}")
-        return super().__new__(mcs, name, bases, new_namespace)
-'''
-
-
-class BaseModel(object):
+class BaseModel:
     _iter_idx: int
 
     # Helper Variables
     _config: "Schema"
     _jadn_types: Dict[str, Tuple[str]] = {
         "Simple": (
-            "Binary",       # A sequence of octets. Length is the number of octets
-            "Boolean",      # An element with one of two values: true or false
-            "Integer",      # A positive or negative whole number
-            "Number",       # A real number
-            "Null",         # An unspecified or non-existent value
-            "String",       # A sequence of characters, each of which has a Unicode codepoint. Length is the number of characters
+            # Sequence of octets. Length is the number of octets
+            "Binary",
+            # Element with one of two values: true or false
+            "Boolean",
+            # Positive or negative whole number
+            "Integer",
+            # Real number
+            "Number",
+            # Unspecified or non-existent value
+            "Null",
+            # Sequence of characters, each of which has a Unicode codepoint. Length is the number of characters
+            "String"
         ),
         "Selector": (
-            "Choice",      # One key and value selected from a set of named or labeled fields. The key has an id and name or label, and is mapped to a type
-            "Enumerated",  # One value selected from a set of named or labeled integers
+            # One key and value selected from a set of named or labeled fields. The key has an id and name or label, and is mapped to a type
+            "Choice",
+            # One value selected from a set of named or labeled integers
+            "Enumerated"
         ),
         "Compound": (
-            "Array",        # An ordered list of labeled fields with positionally-defined semantics. Each field has a position, label, and type
-            "ArrayOf",       # An ordered list of fields with the same semantics. Each field has a position and type vtype
-            "Map",          # An unordered map from a set of specified keys to values with semantics bound to each key. Each key has an id and name or label, and is mapped to a type
-            "MapOf",        # An unordered map from a set of keys of the same type to values with the same semantics. Each key has key type ktype, and is mapped to value type vtype
-            "Record"        # An ordered map from a list of keys with positions to values with positionally-defined semantics. Each key has a position and name, and is mapped to a type. Represents a row in a spreadsheet or database table
+            # Ordered list of labeled fields with positionally-defined semantics. Each field has a position, label, and type
+            "Array",
+            # Ordered list of fields with the same semantics. Each field has a position and type vtype
+            "ArrayOf",
+            # Unordered map from a set of specified keys to values with semantics bound to each key. Each key has an id and name or label, and is mapped to a type
+            "Map",
+            # Unordered map from a set of keys of the same type to values with the same semantics. Each key has key type ktype, and is mapped to value type vtype
+            "MapOf",
+            # Ordered map from a list of keys with positions to values with positionally-defined semantics. Each key has a position and name, and is mapped to a type. Represents a row in a spreadsheet or database table
+            "Record"
         )
     }
     _schema_types: Set[str] = {t for jt in _jadn_types.values() for t in jt}
@@ -93,8 +90,7 @@ class BaseModel(object):
         if self._iter_idx < len(self.__slots__):
             self._iter_idx += 1
             return getattr(self, self.__slots__[self._iter_idx])
-        else:
-            raise StopIteration
+        raise StopIteration
 
     def __contains__(self, key):
         return key in self.__slots__ and hasattr(self, key)
@@ -132,8 +128,6 @@ class BaseModel(object):
         """
         return tuple(attr for attr in self.__slots__ if hasattr(self, attr))
 
-    # Helper functions
-
 
 def init_model(model: BaseModel, input_data: ModelData, silent: bool = True, **kwargs) -> Tuple[dict, Optional[List[Exception]]]:
     """
@@ -149,35 +143,41 @@ def init_model(model: BaseModel, input_data: ModelData, silent: bool = True, **k
     fields = {k: v for k, v in kwargs.items() if re.match(r"^_[^_]", k)}
     errors = []
 
-    if model_class == "Schema":
+    def SchemaModel():
         if "meta" in input_data and isinstance(input_data.get("meta"), dict):
-            from .schema import Meta
+            from .schema import Meta  # pylint: disable=import-outside-toplevel
             input_data["meta"] = Meta(input_data["meta"])
 
         if "types" in input_data and isinstance(input_data.get("types"), list):
-            from .definitions import make_definition
+            from .definitions import make_definition  # pylint: disable=import-outside-toplevel
             input_data["types"] = {t[0]: make_definition(t, **kwargs) for t in input_data.get("types", [])}
 
-    elif model_class == "Meta":
+    def MetaModel():
         if "config" in input_data and isinstance(input_data.get("config"), dict):
-            from .schema import Config
+            from .schema import Config  # pylint: disable=import-outside-toplevel
             input_data["config"] = Config(input_data["config"])
 
-    else:
+    def CheckOptions():
         if "options" in input_data and isinstance(input_data.get("options"), list):
-            from .options import Options
+            from .options import Options  # pylint: disable=import-outside-toplevel
             try:
                 input_data["options"] = Options(input_data["options"])
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
+                # TODO: change to better exception
                 if silent:
                     errors.append(e)
                 else:
                     raise e
 
         if "fields" in input_data and isinstance(input_data.get("fields"), list):
-            from .fields import EnumeratedField, Field
+            from .fields import EnumeratedField, Field  # pylint: disable=import-outside-toplevel
             field = EnumeratedField if basetype == "Enumerated" else Field
             input_data["fields"] = [field(f, **kwargs) for f in input_data["fields"]]
+
+    {
+        "Schema": SchemaModel,
+        "Meta": MetaModel
+    }.get(model_class, CheckOptions)()
 
     for var, val in input_data.items():
         inst = model.__annotations__.get(var)
@@ -185,7 +185,8 @@ def init_model(model: BaseModel, input_data: ModelData, silent: bool = True, **k
             if var not in model.__slots__:
                 raise KeyError(f"{model_class} has extra keys - {var}")
             check_type(var, val, inst)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # TODO: change to better exception
             if silent:
                 errors.append(e)
             else:

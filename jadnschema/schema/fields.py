@@ -12,9 +12,9 @@ from typing import (
 from . import (
     base,
     definitions,
-    exceptions,
     options
 )
+from .. import exceptions
 
 
 class EnumeratedField(base.BaseModel):
@@ -57,7 +57,7 @@ class Field(base.BaseModel):
     id: int  # the integer identifier of the field
     name: str  # the name or label of the field
     type: str  # the type of the field
-    options: options.Options  # an array of zero or more FieldOption (Table 3-5) or TypeOption (Table 3-2) applicable to the field
+    options: options.Options  # array of zero or more FieldOption or TypeOptios applicable to the field
     description: str  # a non-normative comment
 
     __slots__ = ("id", "name", "type", "options", "description")
@@ -143,4 +143,3 @@ class Field(base.BaseModel):
     # Helper functions
     def enum_field(self) -> EnumeratedField:
         return EnumeratedField([self.id, self.name, self.description])
-

@@ -3,13 +3,8 @@ import json
 import os
 import sys
 
-from . import (
-    base
-)
-from .convert.message import (
-    Message,
-    MessageFormats
-)
+from . import base
+from .convert.message import Message, MessageFormats
 
 
 def schema_file(path: str) -> dict:
@@ -18,7 +13,7 @@ def schema_file(path: str) -> dict:
     :param path: path to JADN schema
     :return: loaded JADN schema as a dictionary
     """
-    fname, ext = os.path.splitext(path)
+    ext = os.path.splitext(path)[1]
 
     if ext == '.jadn':
         try:
@@ -27,7 +22,7 @@ def schema_file(path: str) -> dict:
                     path=path,
                     schema=json.load(f)  # jadn.jadn_load(path)
                 )
-        except (IOError, TypeError, ValueError) as e:
+        except (IOError, TypeError, ValueError):
             pass
 
     raise TypeError("Invalid instance given")
@@ -39,7 +34,7 @@ def instance_file(path: str) -> dict:
     :param path: path to message file
     :return: loaded message file as a Message object
     """
-    fname, ext = os.path.splitext(path)
+    ext = os.path.splitext(path)[1]
     ext = ext[1:]
 
     if ext in MessageFormats.values():
@@ -48,7 +43,7 @@ def instance_file(path: str) -> dict:
                 path=path,
                 instance=Message(path, ext)
             )
-        except (IOError, TypeError, ValueError) as e:
+        except (IOError, TypeError, ValueError):
             pass
 
     raise TypeError("Invalid schema given")
@@ -77,13 +72,14 @@ def run(args: dict, stdout=sys.stdout, stderr=sys.stderr) -> None:
     if schema and isinstance(schema, list):
         for err in schema:
             stderr.write(f'{err}\n')
-        exit(1)
+        sys.exit(1)
     elif schema:
         stdout.write(f"Valid schema at {args.get('schema', {}).get('path', '')}\n")
 
     if len(args['instance']) > 0:
         for instance in args['instance']:
-            stdout.write(f"\nValidating instance at {instance.get('path', '')} using schema at {args.get('schema', {}).get('path', '')}\n")
+            paths = instance.get('path', ''), args.get('schema', {}).get('path', '')
+            stdout.write(f"\nValidating instance at {paths[0]} using schema at {paths[1]}\n")
             val_msg = base.validate_instance(schema, instance.get('instance', {}))
             if isinstance(val_msg, list):
                 for err in val_msg:
@@ -92,6 +88,7 @@ def run(args: dict, stdout=sys.stdout, stderr=sys.stderr) -> None:
                 stdout.write(f"Instance '{instance.get('path', '')}' is valid as {val_msg[1]}\n")
 
 
-def main(args: list = sys.argv[1:]) -> None:
+def main(args: list) -> None:
+    args = args or sys.argv[1:]
     arguments = vars(parser.parse_args(args=args or ["--help"]))
     sys.exit(run(args=arguments))

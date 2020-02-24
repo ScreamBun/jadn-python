@@ -3,10 +3,7 @@ Basic functions
 """
 from typing import List, Tuple, Union
 
-from .codec.codec import Codec
-from . import (
-    jadn
-)
+from . import jadn, schema as jadn_schema
 
 
 def validate_schema(schema: Union[dict, str]) -> Union[dict, List[Exception]]:
@@ -37,18 +34,14 @@ def validate_instance(schema: dict, instance: dict, _type: str = None) -> Union[
     if isinstance(schema_validate, list):
         rtn.extend(schema_validate)
     else:
-        schema_codec = Codec(schema, True, True)
+        schema_obj = jadn_schema.Schema(schema)
         if _type:
-            try:
-                return schema_codec.decode(_type, instance)
-            except TypeError as e:
-                rtn.extend(e)
+            err = schema_obj.validate_as(instance, _type)
+            if err:
+                rtn.extend(err)
         else:
-            meta = schema.get('meta', {})
-            for exp in meta.get('exports', []):
-                try:
-                    return schema_codec.decode(exp, instance), exp
-                except (TypeError, ValueError) as e:
-                    rtn.append(TypeError(f'instance not valid as {exp}'))
+            err = schema_obj.validate(instance)
+            if err:
+                rtn.append(err)
 
     return rtn

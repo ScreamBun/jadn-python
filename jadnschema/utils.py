@@ -1,4 +1,5 @@
 import base64
+import binascii
 import re
 import sys
 
@@ -39,8 +40,7 @@ class ObjectDict(dict):
         """
         if key in self:
             return self[key]
-        else:
-            raise KeyError(key)
+        raise KeyError(key)
 
     def __setitem__(self, key: str, val: Any) -> None:
         """
@@ -56,14 +56,6 @@ class FrozenDict(ObjectDict):
     """
     Immutable dictionary
     """
-
-    def __init__(self, *args, **kwargs) -> None:
-        """
-        Initialize a FrozenDict
-        :param args: positional parameters
-        :param kwargs: key/value parameters
-        """
-        super(FrozenDict, self).__init__(*args, **kwargs)
 
     def __hash__(self) -> int:
         """
@@ -132,24 +124,25 @@ def check_values(val: Any) -> Any:
     """
     if isinstance(val, str):
         if val.lower() in ("true", "false"):
-            return safe_cast(val, bool,  val)
+            return safe_cast(val, bool, val)
 
         if re.match(r"^\d+\.\d+$", val):
-            return safe_cast(val, float,  val)
+            return safe_cast(val, float, val)
 
         if val.isdigit():
-            return safe_cast(val, int,  val)
+            return safe_cast(val, int, val)
 
     return val
 
 
-def default_encode(itm: Any, encoders: Dict[Type, Callable[[Any], Any]] = {}) -> Any:
+def default_encode(itm: Any, encoders: Dict[Type, Callable[[Any], Any]] = None) -> Any:
     """
     Default encode the given object to the predefined types
     :param itm: object to encode/decode,
     :param encoders: custom type encoding - Ex) -> {bytes: lambda b: b.decode('utf-8', 'backslashreplace')}
     :return: default system encoded object
     """
+    encoders = encoders or {}
     if isinstance(itm, tuple(encoders.keys())):
         return encoders[type(itm)](itm)
 
@@ -165,13 +158,14 @@ def default_encode(itm: Any, encoders: Dict[Type, Callable[[Any], Any]] = {}) ->
     return toStr(itm)
 
 
-def default_decode(itm: Any, decoders: Dict[Type, Callable[[Any], Any]] = {}) -> Any:
+def default_decode(itm: Any, decoders: Dict[Type, Callable[[Any], Any]] = None) -> Any:
     """
     Default decode the given object to the predefined types
     :param itm: object to encode/decode,
     :param decoders: custom type decoding - Ex) -> {bytes: lambda b: b.decode('utf-8', 'backslashreplace')}
     :return: default system encoded object
     """
+    decoders = decoders or {}
     if isinstance(itm, tuple(decoders.keys())):
         return decoders[type(itm)](itm)
 
@@ -205,7 +199,7 @@ def isBase64(sb: Union[str, bytes]) -> bool:
         else:
             raise ValueError("Argument must be string or bytes")
         return base64.b64encode(base64.b64decode(sb_bytes)) == sb_bytes
-    except Exception:
+    except (binascii.Error, ValueError):
         return False
 
 
@@ -235,6 +229,3 @@ def toThawed(itm: Union[dict, FrozenDict, tuple]) -> Union[dict, list, str]:
         return list(toThawed(i) for i in itm)
 
     return itm
-
-
-
